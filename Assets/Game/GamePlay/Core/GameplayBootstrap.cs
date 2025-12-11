@@ -1,3 +1,4 @@
+using System.Reflection;
 using UnityEngine;
 
 public class GameplayBootstrap : MonoBehaviour
@@ -18,6 +19,28 @@ public class GameplayBootstrap : MonoBehaviour
 
   SpawnController spawnController;
   Board board;
+
+  void Awake()
+  {
+    GameplayCommandBus.Instance.AutoRegisterHandlers(Assembly.GetExecutingAssembly());
+
+
+  }
+
+  private void OnEnable()
+  {
+    GameplayEvents.Subscribe<CardPlayedEvent>(OnCardPlayed);
+  }
+
+  private void OnDisable()
+  {
+    GameplayEvents.Unsubscribe<CardPlayedEvent>(OnCardPlayed);
+  }
+
+  private void OnCardPlayed(CardPlayedEvent evt)
+  {
+    Debug.Log("PlayerSpawner received CardPlayedEvent");
+  }
 
   void Start()
   {
@@ -44,20 +67,61 @@ public class GameplayBootstrap : MonoBehaviour
 
   void Update()
   {
-    // if (matchEnd.IsMatchOver)
-    // {
-    //   Debug.Log("Winner: " + matchEnd.Winner);
-    //   return;
-    // }
+    // ════════════════════════════════════════════════════════════════
+    // THIN CLIENT MODE - Server runs all gameplay logic
+    // ════════════════════════════════════════════════════════════════
+    // Unity only handles:
+    // 1. Visual updates from server state
+    // 2. Player input
+    // 3. UI updates
+    // ════════════════════════════════════════════════════════════════
 
     float dt = Time.deltaTime;
 
-    director.Tick(dt);
-    ai.Tick(dt);
-    matchEnd.Tick();
 
+
+    // 2. Handle player input (send commands to server)
+    HandlePlayerInput();
+
+    // 3. Update UI
+    // TODO: UIController.UpdateUI(dt);
+  }
+
+  /// <summary>
+  /// Handle player input and send commands to server.
+  /// </summary>
+  private void HandlePlayerInput()
+  {
+    // Example: Send spawn command to server when space is pressed
     if (Input.GetKeyDown(KeyCode.Space))
-      playerSpawner.SpawnAt(new Vector3(4, 0, -1));
+    {
+      Vector3 spawnPos = new Vector3(4, 0, -1);
+      SendSpawnCommandToServer(spawnPos);
+    }
+
+    // TODO: Handle card dragging, placement preview, etc.
+  }
+
+  /// <summary>
+  /// Send a spawn command to the Colyseus server.
+  /// </summary>
+  private void SendSpawnCommandToServer(Vector3 position)
+  {
+    if (NetworkClient.Instance?.Room == null)
+    {
+      Debug.LogWarning("Not connected to server!");
+      return;
+    }
+
+    // Send spawn command to server
+    NetworkClient.Instance.Room.Send("spawn-unit", new
+    {
+      x = position.x,
+      y = position.y,
+      unitType = "knight" // TODO: Get from selected card
+    });
+
+    Debug.Log($"[Client] Sent spawn command to server at {position}");
   }
 }
 

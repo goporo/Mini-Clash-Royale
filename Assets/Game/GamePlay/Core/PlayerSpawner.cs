@@ -6,14 +6,14 @@ public class PlayerSpawner
   private CardConfig card;
   private Board board;
 
+
+
   public PlayerSpawner(SpawnController spawner, CardConfig card, Board board)
   {
     this.spawner = spawner;
     this.card = card;
     this.board = board;
   }
-
-
 
   public bool CanSpawn(Vector3 worldPos)
   {

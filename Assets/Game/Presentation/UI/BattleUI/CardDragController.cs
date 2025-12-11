@@ -15,7 +15,7 @@ public class CardDragController : MonoBehaviour, IBeginDragHandler, IDragHandler
 
   public void OnBeginDrag(PointerEventData eventData)
   {
-    preview.Show(slot.card);
+    preview.Show(slot.Config);
   }
 
   public void OnDrag(PointerEventData eventData)
@@ -28,6 +28,10 @@ public class CardDragController : MonoBehaviour, IBeginDragHandler, IDragHandler
   {
     Vector3 worldPos = GetWorldPos(eventData.position);
     Vector3 spawnPos = new Vector3(worldPos.x, 0.5f, worldPos.z);
+
+    GameplayCommandBus.Instance.Execute(
+      new PlayCardCommand(slot.Config, spawnPos, EntityTeam.Team1)
+    );
 
     if (preview.CanSpawnAt(spawnPos))
     {

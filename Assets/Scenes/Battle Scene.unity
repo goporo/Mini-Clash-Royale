@@ -198,8 +198,11 @@ GameObject:
   - component: {fileID: 659585970}
   - component: {fileID: 659585971}
   - component: {fileID: 659585972}
+  - component: {fileID: 659585973}
+  - component: {fileID: 659585975}
+  - component: {fileID: 659585974}
   m_Layer: 0
-  m_Name: GamePlay
+  m_Name: Core
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -251,6 +254,50 @@ MonoBehaviour:
   placementPreview: {fileID: 1943520440}
   kingTowerCfg: {fileID: 11400000, guid: 41caac487de368843a179b665d7d5e08, type: 2}
   princessTowerCfg: {fileID: 11400000, guid: 47c0e7282cdec304eb17f18c1b3480ec, type: 2}
+--- !u!114 &659585973
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 659585968}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9b992d3677aaee545a5123ecd61402ce, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  serverAddress: ws://localhost:2567
+  roomName: clash_room
+--- !u!114 &659585974
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 659585968}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d8e09b497a9467a499ad7263879f7136, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  viewFactory: {fileID: 659585971}
+--- !u!114 &659585975
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 659585968}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cfc0b889517cb0e4cb09645e37d3f2bf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  viewFactory: {fileID: 659585971}
+  resourcesPath: Entities
+  entityPrefabs:
+  - typeName: Knight
+    prefab: {fileID: 7670155689041078408, guid: 349a3e98de82c3847adcda6056458ce5, type: 3}
 --- !u!1 &705507993
 GameObject:
   m_ObjectHideFlags: 0
@@ -1108,7 +1155,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 46873a16ac96e6749a4870bff1a1191b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  card: {fileID: 11400000, guid: f290a8b1aba1bb34585547ef0ab507ca, type: 2}
+  Config: {fileID: 0}
 --- !u!1 &1973804990
 GameObject:
   m_ObjectHideFlags: 0
