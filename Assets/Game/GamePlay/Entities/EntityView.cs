@@ -1,20 +1,23 @@
+using ClashServer;
+using Mirror;
 using UnityEngine;
 
-public class EntityView : MonoBehaviour
+public class EntityView : NetworkBehaviour
 {
-  public Entity Entity { get; private set; }
+
+  public ServerEntity Entity { get; private set; }
 
   // Server-driven state
   private int entityId;
   private Vector3 targetPosition;
   private float currentHealth;
   private float maxHealth;
-  private float smoothingSpeed = 10f; // Adjust for smoother/faster movement
+  private float smoothingSpeed = 10f;
 
-  public void Bind(Entity entity)
+
+  public void Bind(ServerEntity entity)
   {
     Entity = entity;
-    Entity.OnDeathEvent += HandleEntityDeath;
   }
 
   private void HandleEntityDeath()
@@ -22,26 +25,18 @@ public class EntityView : MonoBehaviour
     Destroy(gameObject);
   }
 
-  /// <summary>
-  /// Set the entity ID for this view (used by server-driven mode).
-  /// </summary>
   public void SetEntityId(int id)
   {
     entityId = id;
   }
-
-  /// <summary>
-  /// Set the target position from server update.
-  /// The view will smoothly interpolate to this position.
-  /// </summary>
-  public void SetTargetPosition(float x, float y)
+  private void Update()
   {
-    targetPosition = new Vector3(x, y, transform.position.z);
+    if (isClient)
+    {
+      transform.position = Vector3.Lerp(
+          transform.position, targetPosition, Time.deltaTime * smoothingSpeed);
+    }
   }
-
-  /// <summary>
-  /// Set health values from server update.
-  /// </summary>
   public void SetHealth(float hp, float maxHp)
   {
     currentHealth = hp;
@@ -49,31 +44,12 @@ public class EntityView : MonoBehaviour
     // TODO: Update health bar UI here
   }
 
-  /// <summary>
-  /// Update visual representation (called by EntityViewManager).
-  /// Smoothly interpolates to target position.
-  /// </summary>
-  public void UpdateVisual(float dt)
-  {
-    // Smooth interpolation to target position
-    transform.position = Vector3.Lerp(transform.position, targetPosition, dt * smoothingSpeed);
-
-    // TODO: Update animations based on movement/state
-  }
-
-  void Update()
-  {
-    // Legacy mode: if bound to a local entity, follow its position directly
-    if (Entity != null)
-      transform.position = Entity.Position;
-  }
-
-  void OnDrawGizmos()
-  {
-    if (Entity != null && Entity.Stats != null)
-    {
-      Gizmos.color = Color.yellow;
-      Gizmos.DrawWireSphere(transform.position, Entity.Stats.AttackRange);
-    }
-  }
+  // void OnDrawGizmos()
+  // {
+  //   if (Entity != null && Entity.Stats != null)
+  //   {
+  //     Gizmos.color = Color.yellow;
+  //     Gizmos.DrawWireSphere(transform.position, Entity.Stats.AttackRange);
+  //   }
+  // }
 }

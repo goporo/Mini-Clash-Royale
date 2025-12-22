@@ -13,6 +13,7 @@ GameObject:
   - component: {fileID: 4537452315964456574}
   - component: {fileID: 8361471720549510407}
   - component: {fileID: 7670155689041078408}
+  - component: {fileID: -8362197529100614261}
   m_Layer: 0
   m_Name: Knight
   m_TagString: Untagged
@@ -29,7 +30,7 @@ Transform:
   m_GameObject: {fileID: 2937566061296348571}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.5368964, y: 1, z: -3.390166}
+  m_LocalPosition: {x: -1.9185014, y: 0, z: 15}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -123,3 +124,23 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 70eff7f79beef6349a078a38a540daf5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  syncDirection: 0
+  syncMode: 0
+  syncInterval: 0
+--- !u!114 &-8362197529100614261
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2937566061296348571}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9b91ecbcc199f4492b9a91e820070131, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  sceneId: 0
+  _assetId: 1917352246
+  serverOnly: 0
+  visibility: 0
+  hasSpawned: 0

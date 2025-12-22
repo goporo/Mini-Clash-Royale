@@ -4,11 +4,6 @@ using UnityEngine;
 [DontLogEvent]
 public struct SimpleDontLogEventEvent : IGameEvent
 {
-  public Entity Entity;
-  public SimpleDontLogEventEvent(Entity Entity)
-  {
-    this.Entity = Entity;
-  }
 }
 
 

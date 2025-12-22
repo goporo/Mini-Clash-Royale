@@ -5,12 +5,14 @@ public class CardDragController : MonoBehaviour, IBeginDragHandler, IDragHandler
 {
   public CardSlotUI slot;
   public CardPlacementPreview preview;
+  private PlayerNetwork playerNetwork;
 
   private Camera cam;
 
   void Start()
   {
     cam = Camera.main;
+
   }
 
   public void OnBeginDrag(PointerEventData eventData)
@@ -29,14 +31,11 @@ public class CardDragController : MonoBehaviour, IBeginDragHandler, IDragHandler
     Vector3 worldPos = GetWorldPos(eventData.position);
     Vector3 spawnPos = new Vector3(worldPos.x, 0.5f, worldPos.z);
 
-    GameplayCommandBus.Instance.Execute(
-      new PlayCardCommand(slot.Config, spawnPos, EntityTeam.Team1)
-    );
+    playerNetwork = PlayerNetwork.LocalPlayer;
+    if (playerNetwork == null)
+      Debug.LogError("PlayerNetwork not found in scene!");
+    playerNetwork.CmdPlayCard(1, "knight", new Vector2(spawnPos.x, spawnPos.z));
 
-    if (preview.CanSpawnAt(spawnPos))
-    {
-      preview.Spawn(spawnPos);
-    }
 
     preview.Hide();
   }

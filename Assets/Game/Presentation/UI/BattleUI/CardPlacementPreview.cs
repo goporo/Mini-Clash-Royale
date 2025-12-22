@@ -6,12 +6,7 @@ public class CardPlacementPreview : MonoBehaviour
   private GameObject ghost;
   private CardConfig currentCard;
 
-  private PlayerSpawner playerSpawner;
 
-  public void Init(PlayerSpawner spawner)
-  {
-    playerSpawner = spawner;
-  }
 
   public void Show(CardConfig card)
   {
@@ -25,17 +20,11 @@ public class CardPlacementPreview : MonoBehaviour
 
     ghost.transform.position = pos;
 
-    bool valid = playerSpawner.CanSpawn(pos);
+    bool valid = true;
     ghost.GetComponent<Renderer>().material.color = valid ? Color.green : Color.red;
   }
 
-  public bool CanSpawnAt(Vector3 pos)
-      => playerSpawner.CanSpawn(pos);
 
-  public void Spawn(Vector3 pos)
-  {
-    playerSpawner.SpawnAt(pos);
-  }
 
   public void Hide()
   {
