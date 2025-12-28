@@ -4,13 +4,9 @@ public class CardPlacementPreview : MonoBehaviour
 {
   public GameObject ghostPrefab;
   private GameObject ghost;
-  private CardConfig currentCard;
-
-
 
   public void Show(CardConfig card)
   {
-    currentCard = card;
     ghost = Instantiate(ghostPrefab);
   }
 
@@ -24,12 +20,9 @@ public class CardPlacementPreview : MonoBehaviour
     ghost.GetComponent<Renderer>().material.color = valid ? Color.green : Color.red;
   }
 
-
-
   public void Hide()
   {
     if (ghost != null) Destroy(ghost);
     ghost = null;
-    currentCard = null;
   }
 }

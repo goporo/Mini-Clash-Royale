@@ -1,55 +1,57 @@
-using ClashServer;
-using Mirror;
+using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
-public class EntityView : NetworkBehaviour
+public class EntityView : MonoBehaviour
 {
-
-  public ServerEntity Entity { get; private set; }
-
-  // Server-driven state
   private int entityId;
   private Vector3 targetPosition;
-  private float currentHealth;
-  private float maxHealth;
+  private int currentHealth;
+  private int maxHealth;
   private float smoothingSpeed = 10f;
 
-
-  public void Bind(ServerEntity entity)
-  {
-    Entity = entity;
-  }
-
-  private void HandleEntityDeath()
-  {
-    Destroy(gameObject);
-  }
+  [SerializeField] private GameObject healthBar;
+  [SerializeField] private TMP_Text healthText;
 
   public void SetEntityId(int id)
   {
     entityId = id;
   }
+
+  public void SetTargetPosition(Vector3 position)
+  {
+    targetPosition = position;
+  }
+
   private void Update()
   {
-    if (isClient)
-    {
-      transform.position = Vector3.Lerp(
-          transform.position, targetPosition, Time.deltaTime * smoothingSpeed);
-    }
+    transform.position = Vector3.Lerp(
+        transform.position, targetPosition, Time.deltaTime * smoothingSpeed);
   }
-  public void SetHealth(float hp, float maxHp)
+
+  public void SetHealth(int hp, int maxHp)
   {
     currentHealth = hp;
     maxHealth = maxHp;
-    // TODO: Update health bar UI here
+    UpdateHealthUI(hp, maxHp);
   }
 
-  // void OnDrawGizmos()
-  // {
-  //   if (Entity != null && Entity.Stats != null)
-  //   {
-  //     Gizmos.color = Color.yellow;
-  //     Gizmos.DrawWireSphere(transform.position, Entity.Stats.AttackRange);
-  //   }
-  // }
+  public void UpdateHealthUI(int hp, int maxHp)
+  {
+    if (healthBar != null)
+    {
+      Image hbImage = healthBar.GetComponent<Image>();
+      if (hbImage != null)
+      {
+        hbImage.fillAmount = (float)hp / maxHp;
+      }
+    }
+
+    if (healthText != null)
+    {
+      healthText.text = $"{hp}";
+    }
+  }
+
+  public int GetEntityId() => entityId;
 }

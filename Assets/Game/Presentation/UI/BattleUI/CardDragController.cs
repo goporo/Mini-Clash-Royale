@@ -33,9 +33,13 @@ public class CardDragController : MonoBehaviour, IBeginDragHandler, IDragHandler
 
     playerNetwork = PlayerNetwork.LocalPlayer;
     if (playerNetwork == null)
+    {
       Debug.LogError("PlayerNetwork not found in scene!");
-    playerNetwork.CmdPlayCard(1, "knight", new Vector2(spawnPos.x, spawnPos.z));
+      preview.Hide();
+      return;
+    }
 
+    playerNetwork.PlayCard(1, "knight", new Vector2(spawnPos.x, spawnPos.z));
 
     preview.Hide();
   }
