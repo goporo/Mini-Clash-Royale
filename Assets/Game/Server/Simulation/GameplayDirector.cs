@@ -20,28 +20,29 @@ namespace ClashServer
     public GameplayDirector(ILogger logger = null)
     {
       this.logger = logger ?? new ConsoleLogger();
+
     }
 
     // Main update loop - called every server tick
-    public void Update(float deltaTime)
+    public void Update()
     {
       currentTick++;
-      gameTime += deltaTime;
+      gameTime += ServerMatchController.FIXED_DT;
 
-      // Phase 1: Update movement for all entities
-      foreach (var entity in entities.ToList())
+      // Phase 1: Update movement for all entities (deterministic order)
+      foreach (var entity in entities.OrderBy(e => e.Id).ToList())
       {
         if (!entity.IsAlive) continue;
-        UpdateMovement(entity, deltaTime);
+        UpdateMovement(entity);
       }
 
       // Phase 2: Calculate all attacks (without applying damage yet)
       List<(ServerEntity attacker, ServerEntity target, float damage)> pendingAttacks = new List<(ServerEntity, ServerEntity, float)>();
 
-      foreach (var entity in entities.ToList())
+      foreach (var entity in entities.OrderBy(e => e.Id).ToList())
       {
         if (!entity.IsAlive) continue;
-        CalculateAttack(entity, deltaTime, pendingAttacks);
+        CalculateAttack(entity, pendingAttacks);
       }
 
       // Phase 3: Apply all damage simultaneously
@@ -60,7 +61,7 @@ namespace ClashServer
       entities.RemoveAll(e => !e.IsAlive);
     }
 
-    private void UpdateMovement(ServerEntity entity, float deltaTime)
+    private void UpdateMovement(ServerEntity entity)
     {
       // Try to acquire target if none (even for buildings)
       if (entity.Target == null || !entity.Target.IsAlive)
@@ -75,21 +76,26 @@ namespace ClashServer
         return;
       }
 
-      Vector2 direction = Vector2.Zero;
+      Vector2 direction;
 
       if (entity.Target != null && entity.Target.IsAlive)
       {
-        direction = Vector2.Normalize(entity.Target.Position - entity.Position);
+        direction = entity.Target.Position - entity.Position;
+        float lengthSq = direction.LengthSquared();
+        if (lengthSq > 0)
+          direction /= MathF.Sqrt(lengthSq);
+        else
+          direction = Vector2.Zero;
       }
       else
       {
         direction = new Vector2(0, entity.Team == EntityTeam.Team1 ? 1 : -1);
       }
 
-      entity.Position += direction * entity.Stats.MoveSpeed * deltaTime;
+      entity.Position += direction * entity.Stats.MovePerTick;
     }
 
-    private void CalculateAttack(ServerEntity entity, float deltaTime, List<(ServerEntity attacker, ServerEntity target, float damage)> pendingAttacks)
+    private void CalculateAttack(ServerEntity entity, List<(ServerEntity attacker, ServerEntity target, float damage)> pendingAttacks)
     {
       if (entity.Target == null || !entity.Target.IsAlive)
         return;
@@ -97,12 +103,14 @@ namespace ClashServer
       if (!IsInRange(entity, entity.Target, entity.Stats.AttackRange))
         return;
 
-      entity.AttackCooldown -= deltaTime;
-      if (entity.AttackCooldown <= 0)
+      if (entity.AttackCooldownTicks > 0)
       {
-        pendingAttacks.Add((entity, entity.Target, entity.Stats.AttackDamage));
-        entity.AttackCooldown = 1f / entity.Stats.AttackSpeed;
+        entity.AttackCooldownTicks--;
+        return;
       }
+
+      pendingAttacks.Add((entity, entity.Target, entity.Stats.AttackDamage));
+      entity.AttackCooldownTicks = entity.Stats.AttackCooldownTicks;
     }
 
     private ServerEntity AcquireTarget(ServerEntity entity)
@@ -110,12 +118,16 @@ namespace ClashServer
       ServerEntity closest = null;
       float closestDistSq = entity.Stats.AggroRange * entity.Stats.AggroRange;
 
-      foreach (var other in entities)
+      // Sort by ID for deterministic iteration
+      foreach (var other in entities.OrderBy(e => e.Id))
       {
         if (!other.IsAlive || other.Team == entity.Team)
           continue;
 
         float distSq = (other.Position - entity.Position).LengthSquared();
+        
+        // Use strict less-than for deterministic behavior
+        // When distances are equal, lower ID wins (because we iterate by ID)
         if (distSq < closestDistSq)
         {
           closest = other;

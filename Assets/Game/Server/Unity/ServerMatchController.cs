@@ -18,10 +18,19 @@ namespace ClashServer
     private MatchManager matchManager;
     private Dictionary<NetworkConnectionToClient, PlayerState> players;
 
-    const float TICK_RATE = 0.1f;
-    const float SNAPSHOT_RATE = 0.1f;
-    float tickTimer;
-    float snapshotTimer;
+    // Replay system
+    private ReplayRecorder replayRecorder;
+    private DriftDetector driftDetector;
+    [SerializeField] private bool enableReplay = true;
+    [SerializeField] private bool enableDriftDetection = true;
+    [SerializeField] private string replayFolderPath = "Replays";
+
+    public const float FIXED_DT = 0.1f; // Callbacks every 0.1s
+    private const float SNAPSHOT_RATE = 0.1f;
+    private float tickTimer;
+    private float snapshotTimer;
+    private int currentTick = 0;
+    private float timeAccumulator = 0f;
 
     private HashSet<NetworkConnectionToClient> clientsNeedingFullSnapshot = new HashSet<NetworkConnectionToClient>();
 
@@ -38,6 +47,28 @@ namespace ClashServer
       matchManager = new MatchManager(logger);
       players = new Dictionary<NetworkConnectionToClient, PlayerState>();
       clientsNeedingFullSnapshot = new HashSet<NetworkConnectionToClient>();
+
+      // Initialize replay system
+      if (enableReplay)
+      {
+        replayRecorder = new ReplayRecorder();
+
+        // Create replay folder if it doesn't exist
+        if (!System.IO.Directory.Exists(replayFolderPath))
+        {
+          System.IO.Directory.CreateDirectory(replayFolderPath);
+        }
+
+        var metadata = new MatchMetadata("Player1", "AI");
+        replayRecorder.StartRecording(metadata);
+        Debug.Log("[Server] Replay recording started");
+      }
+
+      if (enableDriftDetection)
+      {
+        driftDetector = new DriftDetector(hashInterval: 10, logger: logger);
+        Debug.Log("[Server] Drift detection enabled (every 10 ticks)");
+      }
 
       InitializeMatch();
     }
@@ -71,11 +102,16 @@ namespace ClashServer
     [ServerCallback]
     private void Update()
     {
+      // Stop updates when match is over
+      if (matchManager != null && matchManager.IsMatchOver)
+        return;
+
       tickTimer += Time.deltaTime;
-      while (tickTimer >= TICK_RATE)
+      timeAccumulator += Time.deltaTime;
+      while (timeAccumulator >= FIXED_DT)
       {
-        tickTimer -= TICK_RATE;
-        ServerTick(TICK_RATE);
+        timeAccumulator -= FIXED_DT;
+        AdvanceTick();
       }
 
       snapshotTimer += Time.deltaTime;
@@ -86,15 +122,76 @@ namespace ClashServer
       }
     }
 
-    private void ServerTick(float deltaTime)
+    private void AdvanceTick()
     {
-      gameplayDirector.Update(deltaTime);
-      matchManager.UpdateAI(deltaTime, gameplayDirector);
+      currentTick++;
+
+      // Process queued commands for this tick BEFORE simulation
+      matchManager.ProcessCommandsForTick(currentTick, gameplayDirector);
+
+      // Run simulation
+      gameplayDirector.Update();
+
+      // Update AI and record any commands
+      var aiCommand = matchManager.UpdateAI(currentTick + 1);
+      if (aiCommand.HasValue)
+      {
+        var cmd = aiCommand.Value;
+
+        // Record AI command for replay
+        if (enableReplay && replayRecorder != null && replayRecorder.IsRecording)
+        {
+          replayRecorder.RecordCommand(cmd);
+        }
+
+        // Queue AI command
+        matchManager.QueueCommand(cmd);
+        Debug.Log($"[Server] AI queued command for tick {cmd.Tick}: {cmd.Type}");
+      }
+
       matchManager.UpdateMatchState(gameplayDirector);
 
-      if (matchManager.IsMatchOver && matchManager.Winner.HasValue)
+      // Record state hash for drift detection
+      if (enableDriftDetection && driftDetector != null)
+      {
+        driftDetector.RecordIfNeeded(currentTick, gameplayDirector);
+      }
+
+      // Check for match end
+      if (matchManager.IsMatchOver)
+      {
+        HandleMatchEnd();
+      }
+    }
+
+    private void HandleMatchEnd()
+    {
+      // Broadcast match ended (handle draw case)
+      if (matchManager.Winner.HasValue)
       {
         BroadcastMatchEnded(matchManager.Winner.Value);
+      }
+
+      // Stop replay recording and save
+      if (enableReplay && replayRecorder != null && replayRecorder.IsRecording)
+      {
+        // Add drift detection hashes
+        if (enableDriftDetection && driftDetector != null)
+        {
+          foreach (var (tick, hash) in driftDetector.Hashes)
+          {
+            replayRecorder.RecordStateHash(tick, hash);
+          }
+        }
+
+        replayRecorder.StopRecording(matchManager.Winner, currentTick);
+
+        string timestamp = System.DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+        string filename = $"match_{timestamp}.replay";
+        string fullPath = System.IO.Path.Combine(replayFolderPath, filename);
+
+        replayRecorder.SaveToFile(fullPath);
+        Debug.Log($"[Server] Replay saved to: {fullPath}");
       }
     }
 
@@ -112,6 +209,7 @@ namespace ClashServer
 
       PlayerState playerState = players[sender];
 
+      // Validation BEFORE creating command
       if (!playerState.CanAffordCard(cardId))
       {
         Debug.LogWarning($"[Server] Player cannot afford card {cardId}");
@@ -126,9 +224,25 @@ namespace ClashServer
         return;
       }
 
+      // Create command AFTER validation
+      // Queue for NEXT tick since current tick already processed commands
+      int playerId = playerState.Team == EntityTeam.Team1 ? 0 : 1;
+      int executionTick = currentTick + 1;
+      var command = MatchCommand.PlayCard(executionTick, playerId, cardId, position);
+
+      // Log command for replay
+      if (enableReplay && replayRecorder != null && replayRecorder.IsRecording)
+      {
+        replayRecorder.RecordCommand(command);
+      }
+
+      // Queue command for execution (will execute at next tick)
+      matchManager.QueueCommand(command);
+
+      // Spend elixir
       playerState.SpendElixir(cardId);
-      ServerEntity entity = gameplayDirector.SpawnEntity(type, position, playerState.Team);
-      Debug.Log($"[Server] Player played card {cardId}, spawned entity {entity.Id} ({type}) at {position}");
+
+      Debug.Log($"[Server] Player {playerId} queued PlayCard for tick {executionTick}: card={cardId} at {position}");
     }
 
     private bool IsValidSpawnPosition(System.Numerics.Vector2 position, EntityTeam team)

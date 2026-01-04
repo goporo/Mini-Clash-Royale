@@ -1,3 +1,4 @@
+using System;
 using System.Numerics;
 
 namespace ClashServer
@@ -9,25 +10,37 @@ namespace ClashServer
     Team2 = 1
   }
 
+  public enum MoveSpeed
+  {
+    Slow = 1,
+    Medium = 2,
+    Fast = 3,
+    VeryFast = 4
+  }
+
   public struct EntityStats
   {
     public float MaxHP;
     public float CurrentHP;
     public float MoveSpeed;
+    public float MovePerTick;
     public float AttackRange;
     public float AttackDamage;
-    public float AttackSpeed;
+    public float AttackCooldown;
+    public int AttackCooldownTicks;
     public float AggroRange;
 
     public EntityStats(float maxHP, float moveSpeed, float attackRange,
-        float attackDamage, float attackSpeed, float aggroRange)
+        float attackDamage, float attackCooldown, float aggroRange)
     {
       MaxHP = maxHP;
       CurrentHP = maxHP;
       MoveSpeed = moveSpeed;
+      MovePerTick = moveSpeed * ServerMatchController.FIXED_DT;
       AttackRange = attackRange;
       AttackDamage = attackDamage;
-      AttackSpeed = attackSpeed;
+      AttackCooldown = attackCooldown;
+      AttackCooldownTicks = (int)MathF.Round(attackCooldown / ServerMatchController.FIXED_DT);
       AggroRange = aggroRange;
     }
   }
@@ -41,7 +54,7 @@ namespace ClashServer
     public EntityStats Stats { get; set; }
     public ServerEntity Target { get; set; }
     public bool IsAlive { get; set; }
-    public float AttackCooldown { get; set; }
+    public int AttackCooldownTicks { get; set; }
     public bool IsBuilding { get; set; }
 
     public ServerEntity(int id, string type, Vector2 position, EntityTeam team, bool isBuilding = false)
@@ -52,7 +65,7 @@ namespace ClashServer
       Team = team;
       IsBuilding = isBuilding;
       IsAlive = true;
-      AttackCooldown = 0;
+      AttackCooldownTicks = 0;
       Stats = GetStatsForType(type);
     }
 
@@ -61,15 +74,15 @@ namespace ClashServer
       switch (type.ToLower())
       {
         case "knight":
-          return new EntityStats(100, 2f, 1.5f, 20f, 1.5f, 5f);
+          return new EntityStats(100, 2f, 1.5f, 20f, 1.0f, 5f);
         case "archer":
           return new EntityStats(50, 1.5f, 5f, 15f, 1f, 6f);
         case "giant":
           return new EntityStats(300, 1f, 1.5f, 40f, 1f, 5f);
         case "tower":
-          return new EntityStats(500, 0f, 6f, 10f, 1f, 6f);
+          return new EntityStats(50, 0f, 6f, 10f, 1f, 6f);
         case "kingtower":
-          return new EntityStats(10000, 0f, 7f, 10f, 1.2f, 7f);
+          return new EntityStats(100, 0f, 7f, 10f, 1.2f, 7f);
         default:
           return new EntityStats(100, 2f, 1.5f, 20f, 1.5f, 5f);
       }

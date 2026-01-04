@@ -119,6 +119,54 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
+--- !u!1 &311978224
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 311978226}
+  - component: {fileID: 311978225}
+  m_Layer: 0
+  m_Name: Replay
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &311978225
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 311978224}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f9663f36a7077d64cbf9fb633277bccd, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  replayFolderPath: Replays
+  specificReplayFile: 
+  testOnStart: 0
+  lastTestResult: 'Tested 2 replays: 2 passed, 0 failed'
+--- !u!4 &311978226
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 311978224}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -0.17866962, y: -6.7671375, z: -5.195941}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &347995797
 GameObject:
   m_ObjectHideFlags: 0
@@ -652,6 +700,9 @@ MonoBehaviour:
   syncDirection: 0
   syncMode: 0
   syncInterval: 0
+  enableReplay: 0
+  enableDriftDetection: 0
+  replayFolderPath: Replays
 --- !u!114 &882347159
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2229,4 +2280,5 @@ SceneRoots:
   - {fileID: 385250197}
   - {fileID: 1230577704}
   - {fileID: 659585970}
+  - {fileID: 311978226}
   - {fileID: 882347147}
