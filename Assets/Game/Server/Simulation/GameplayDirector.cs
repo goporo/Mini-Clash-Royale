@@ -53,7 +53,7 @@ namespace ClashServer
           target.TakeDamage(damage);
           if (!target.IsAlive)
           {
-            logger.Log($"[Server] Entity {target.Id} ({target.Type}) died");
+            // logger.Log($"[Server] Entity {target.Id} ({target.Type}) died");
           }
         }
       }
@@ -125,7 +125,7 @@ namespace ClashServer
           continue;
 
         float distSq = (other.Position - entity.Position).LengthSquared();
-        
+
         // Use strict less-than for deterministic behavior
         // When distances are equal, lower ID wins (because we iterate by ID)
         if (distSq < closestDistSq)

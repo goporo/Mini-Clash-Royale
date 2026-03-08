@@ -134,7 +134,6 @@ public class EntityViewManager : MonoBehaviour
       }
 
       UpdateHealthBar(entityViews[entityData.Id]);
-      Debug.Log($"[Client] Spawned {entityData.Type} (id={entityData.Id}) from delta");
     }
 
     foreach (var entityId in delta.DestroyedEntityIds)
@@ -168,7 +167,6 @@ public class EntityViewManager : MonoBehaviour
     {
       Destroy(entityViews[entityId].go);
       entityViews.Remove(entityId);
-      Debug.Log($"[EntityView] Removed entity {entityId}");
     }
   }
 

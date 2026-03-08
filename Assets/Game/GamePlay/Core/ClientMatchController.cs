@@ -30,6 +30,8 @@ namespace ClashServer
       Debug.Log($"[Client] Received full snapshot: Tick {snapshot.Tick}, Entities: {snapshot.Entities.Count}");
       currentTick = snapshot.Tick;
 
+      ClientBoardState.RebuildFromSnapshot(snapshot);
+
       if (EntityViewManager.Instance != null)
       {
         EntityViewManager.Instance.ApplyFullSnapshot(snapshot);
@@ -41,6 +43,11 @@ namespace ClashServer
     {
       // Debug.Log($"[Client] Received delta snapshot: +{delta.SpawnedEntities.Count} -{delta.DestroyedEntityIds.Count} ~{delta.UpdatedEntities.Count}");
       currentTick = delta.Tick;
+
+      foreach (var e in delta.SpawnedEntities)
+        ClientBoardState.PlaceBuilding(e);
+      foreach (var id in delta.DestroyedEntityIds)
+        ClientBoardState.RemoveBuildingById(id);
 
       if (EntityViewManager.Instance != null)
       {

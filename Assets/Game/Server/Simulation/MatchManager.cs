@@ -1,6 +1,8 @@
 using System.Linq;
 using System.Numerics;
 using System.Collections.Generic;
+using Unity.Services.Relay.Models;
+using System.Diagnostics;
 
 namespace ClashServer
 {
@@ -12,6 +14,7 @@ namespace ClashServer
     private int aiSpawnCooldownTicks = 0;
     private int aiSpawnIntervalTicks = (int)(8f / ServerMatchController.FIXED_DT); // 8 seconds at 0.1s per tick
     private System.Random random;
+    private readonly BoardManager boardManager = new();
 
     private ILogger logger;
 
@@ -28,6 +31,24 @@ namespace ClashServer
     public int CurrentMatchTick => currentMatchTick;
     public int MatchDurationTicks => matchDurationTicks;
     public float RemainingTimeSeconds => (matchDurationTicks - currentMatchTick) * ServerMatchController.FIXED_DT;
+    public BoardManager BoardManager => boardManager;
+
+    public struct RegionBounds
+    {
+      public float Left;
+      public float Right;
+      public float Bottom;
+      public float Top;
+      public float RiverBottom;
+      public float RiverTop;
+    }
+
+    private enum CardType
+    {
+      Spell,
+      Troop,
+      Building
+    }
 
     public MatchManager(ILogger logger = null, int? randomSeed = null)
     {
@@ -88,21 +109,84 @@ namespace ClashServer
           ApplySurrender(cmd);
           break;
         case CommandType.Emote:
-          // Emotes don't affect game state
           break;
       }
     }
 
     private void ApplyPlayCard(MatchCommand cmd, GameplayDirector director)
     {
-      // Determine team based on player ID
       EntityTeam team = cmd.PlayerId == 0 ? EntityTeam.Team1 : EntityTeam.Team2;
 
-      // Map card ID to entity type
       string entityType = MapCardIdToType(cmd.CardId);
+      RegionBounds bounds = new()
+      {
+        Left = -9f,
+        Right = 9f,
+        Bottom = -16f,
+        Top = 16f,
+        RiverBottom = -1f,
+        RiverTop = 1f
+      };
+      CardType cardType = MapCardIdToCardType(cmd.CardId);
+      if (!ValidateSpawn(cardType, cmd.Position, team, bounds))
+      {
+        logger.Log($"[MatchManager] Invalid spawn position {cmd.Position} for PlayCard. Command ignored.");
+        return;
+      }
 
-      director.SpawnEntity(entityType, cmd.Position, team);
+      bool isBuilding = cardType == CardType.Building;
+      var entity = director.SpawnEntity(entityType, cmd.Position, team, isBuilding);
+      if (isBuilding)
+        boardManager.PlaceBuilding(entity);
       logger.Log($"[MatchManager] Applied PlayCard: {entityType} at {cmd.Position} for Team {team}");
+    }
+
+    private bool ValidateSpawn(CardType cardType, Vector2 pos, EntityTeam team, RegionBounds bounds)
+    {
+      if (!IsInsideBounds(pos, bounds))
+        return false;
+
+      return cardType switch
+      {
+        CardType.Spell => true,
+        CardType.Troop => IsInsideBounds(pos, GetDeployRegion(team, bounds))
+                          && !boardManager.IsTileOccupied(pos),
+        CardType.Building => IsInsideBounds(pos, GetDeployRegion(team, bounds))
+                             && !boardManager.IsTileOccupied(pos),
+        _ => false
+      };
+    }
+
+    private bool IsInsideBounds(Vector2 pos, RegionBounds bounds)
+    {
+      return pos.X >= bounds.Left &&
+             pos.X <= bounds.Right &&
+             pos.Y >= bounds.Bottom &&
+             pos.Y <= bounds.Top;
+    }
+
+    private RegionBounds GetDeployRegion(EntityTeam team, RegionBounds bounds)
+    {
+      if (team == EntityTeam.Team1)
+      {
+        return new RegionBounds
+        {
+          Left = bounds.Left,
+          Right = bounds.Right,
+          Bottom = bounds.Bottom,
+          Top = bounds.RiverBottom
+        };
+      }
+      else
+      {
+        return new RegionBounds
+        {
+          Left = bounds.Left,
+          Right = bounds.Right,
+          Bottom = bounds.RiverTop,
+          Top = bounds.Top
+        };
+      }
     }
 
     private void ApplySurrender(MatchCommand cmd)
@@ -117,7 +201,6 @@ namespace ClashServer
 
     private string MapCardIdToType(int cardId)
     {
-      // Simple mapping - extend as needed
       return cardId switch
       {
         0 => "knight",
@@ -127,11 +210,19 @@ namespace ClashServer
       };
     }
 
+    private CardType MapCardIdToCardType(int cardId)
+    {
+      return cardId switch
+      {
+        // Add building card IDs here as new cards are implemented
+        _ => CardType.Troop
+      };
+    }
+
     public void UpdateMatchState(GameplayDirector director)
     {
       if (matchOver) return;
 
-      // Increment match timer
       currentMatchTick++;
 
       var team1Towers = director.GetEntitiesByTeam(EntityTeam.Team1)
@@ -251,6 +342,7 @@ namespace ClashServer
       aiSpawnCooldownTicks = 0;
       currentMatchTick = 0;
       commandQueue.Clear();
+      boardManager.Clear();
     }
   }
 }

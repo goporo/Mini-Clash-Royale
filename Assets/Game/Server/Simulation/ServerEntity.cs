@@ -80,9 +80,11 @@ namespace ClashServer
         case "giant":
           return new EntityStats(300, 1f, 1.5f, 40f, 1f, 5f);
         case "tower":
-          return new EntityStats(50, 0f, 6f, 10f, 1f, 6f);
+          return new EntityStats(500, 0f, 6f, 10f, 1f, 6f);
         case "kingtower":
-          return new EntityStats(100, 0f, 7f, 10f, 1.2f, 7f);
+          return new EntityStats(1000, 0f, 7f, 10f, 1.2f, 7f);
+        case "block":
+          return new EntityStats(999, 0f, 0f, 0f, 0f, 0f);
         default:
           return new EntityStats(100, 2f, 1.5f, 20f, 1.5f, 5f);
       }

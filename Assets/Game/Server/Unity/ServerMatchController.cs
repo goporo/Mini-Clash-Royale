@@ -84,15 +84,18 @@ namespace ClashServer
 
     private void InitializeMatch()
     {
+      var board = matchManager.BoardManager;
+
       // Team 1 (bottom)
-      gameplayDirector.SpawnEntity("kingtower", new System.Numerics.Vector2(0, -6), EntityTeam.Team1, true);
-      gameplayDirector.SpawnEntity("tower", new System.Numerics.Vector2(-5, -3), EntityTeam.Team1, true);
-      gameplayDirector.SpawnEntity("tower", new System.Numerics.Vector2(5, -3), EntityTeam.Team1, true);
+      board.PlaceBuilding(gameplayDirector.SpawnEntity("block", new System.Numerics.Vector2(0f, 0f), EntityTeam.Team1, true));
+      board.PlaceBuilding(gameplayDirector.SpawnEntity("kingtower", new System.Numerics.Vector2(0f, -13f), EntityTeam.Team1, true));
+      board.PlaceBuilding(gameplayDirector.SpawnEntity("tower", new System.Numerics.Vector2(-5.5f, -10.5f), EntityTeam.Team1, true));
+      board.PlaceBuilding(gameplayDirector.SpawnEntity("tower", new System.Numerics.Vector2(5.5f, -10.5f), EntityTeam.Team1, true));
 
       // Team 2 (top)
-      gameplayDirector.SpawnEntity("kingtower", new System.Numerics.Vector2(0, 18), EntityTeam.Team2, true);
-      gameplayDirector.SpawnEntity("tower", new System.Numerics.Vector2(-5, 15), EntityTeam.Team2, true);
-      gameplayDirector.SpawnEntity("tower", new System.Numerics.Vector2(5, 15), EntityTeam.Team2, true);
+      board.PlaceBuilding(gameplayDirector.SpawnEntity("kingtower", new System.Numerics.Vector2(0f, 13f), EntityTeam.Team2, true));
+      board.PlaceBuilding(gameplayDirector.SpawnEntity("tower", new System.Numerics.Vector2(-5.5f, 10.5f), EntityTeam.Team2, true));
+      board.PlaceBuilding(gameplayDirector.SpawnEntity("tower", new System.Numerics.Vector2(5.5f, 10.5f), EntityTeam.Team2, true));
 
       gameplayDirector.ResetSnapshotTracking();
 
@@ -146,7 +149,6 @@ namespace ClashServer
 
         // Queue AI command
         matchManager.QueueCommand(cmd);
-        Debug.Log($"[Server] AI queued command for tick {cmd.Tick}: {cmd.Type}");
       }
 
       matchManager.UpdateMatchState(gameplayDirector);

@@ -38,7 +38,6 @@ namespace ClashServer
 
       int hash = HashBoardState(director);
       hashes.Add((tick, hash));
-      logger.Log($"[DriftDetector] T{tick}: Hash={hash}");
     }
 
     /// <summary>
