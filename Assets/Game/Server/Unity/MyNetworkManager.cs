@@ -22,6 +22,9 @@ public class MyNetworkManager : NetworkManager
     NetworkClient.RegisterHandler<DeltaSnapshotMessage>(OnDeltaSnapshotMessage);
     NetworkClient.RegisterHandler<PlayCardFailedMessage>(OnPlayCardFailedMessage);
     NetworkClient.RegisterHandler<MatchEndedMessage>(OnMatchEndedMessage);
+    NetworkClient.RegisterHandler<ElixirUpdateMessage>(OnElixirUpdateMessage);
+    NetworkClient.RegisterHandler<HandStateMessage>(OnHandStateMessage);
+    NetworkClient.RegisterHandler<CardDrawnMessage>(OnCardDrawnMessage);
 
     Debug.Log("[Client] Message handlers registered");
   }
@@ -38,7 +41,7 @@ public class MyNetworkManager : NetworkManager
     if (ServerMatchController.Instance != null)
     {
       System.Numerics.Vector2 position = msg.Position.ToVector2();
-      ServerMatchController.Instance.Server_PlayCard(conn, msg.CardId, msg.Type, position);
+      ServerMatchController.Instance.Server_PlayCard(conn, msg.CardId, position);
     }
   }
 
@@ -80,6 +83,26 @@ public class MyNetworkManager : NetworkManager
     {
       ClientMatchController.Instance.OnMatchEnded(msg.Winner);
     }
+  }
+
+  void OnElixirUpdateMessage(ElixirUpdateMessage msg)
+  {
+    if (ClientMatchController.Instance != null)
+    {
+      ClientMatchController.Instance.OnElixirUpdated(msg.MilliElixir);
+    }
+  }
+
+  void OnHandStateMessage(HandStateMessage msg)
+  {
+    if (ClientMatchController.Instance != null)
+      ClientMatchController.Instance.OnHandStateReceived(msg);
+  }
+
+  void OnCardDrawnMessage(CardDrawnMessage msg)
+  {
+    if (ClientMatchController.Instance != null)
+      ClientMatchController.Instance.OnCardDrawn(msg);
   }
 
   public override void OnServerConnect(NetworkConnectionToClient conn)

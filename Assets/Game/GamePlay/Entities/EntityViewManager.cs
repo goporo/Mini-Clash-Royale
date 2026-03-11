@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using ClashServer;
+using ClashShared;
 
 // Pure client-side entity view manager
 public class EntityViewManager : MonoBehaviour
@@ -14,7 +15,7 @@ public class EntityViewManager : MonoBehaviour
     public Vector3 targetPosition;
     public float currentHP;
     public float maxHP;
-    public string type;
+    public CardId type;
     public EntityTeam team;
     public bool isBuilding;
   }
@@ -25,7 +26,7 @@ public class EntityViewManager : MonoBehaviour
   public GameObject knightPrefab;
   public GameObject archerPrefab;
   public GameObject giantPrefab;
-  public GameObject towerPrefab;
+  public GameObject princessTowerPrefab;
   public GameObject kingTowerPrefab;
 
   [Header("Fallback Visual")]
@@ -51,8 +52,8 @@ public class EntityViewManager : MonoBehaviour
     {
       if (!entityData.IsAlive) continue;
 
-      UnityEngine.Vector2 pos = entityData.Position.ToUnityVector2();
-      Vector3 worldPos = new Vector3(pos.x, 0, pos.y);
+      Vector2 pos = entityData.Position.ToUnityVector2();
+      Vector3 worldPos = new(pos.x, 0, pos.y);
 
       GameObject prefab = GetPrefabForType(entityData.Type);
       GameObject go = Instantiate(prefab, worldPos, Quaternion.identity);
@@ -98,8 +99,8 @@ public class EntityViewManager : MonoBehaviour
       if (entityViews.ContainsKey(entityData.Id))
         continue;
 
-      UnityEngine.Vector2 pos = entityData.Position.ToUnityVector2();
-      Vector3 worldPos = new Vector3(pos.x, 0, pos.y);
+      Vector2 pos = entityData.Position.ToUnityVector2();
+      Vector3 worldPos = new(pos.x, 0, pos.y);
 
       GameObject prefab = GetPrefabForType(entityData.Type);
       GameObject go = Instantiate(prefab, worldPos, Quaternion.identity);
@@ -170,19 +171,19 @@ public class EntityViewManager : MonoBehaviour
     }
   }
 
-  public GameObject GetPrefabForType(string type)
+  public GameObject GetPrefabForType(CardId type)
   {
-    switch (type.ToLower())
+    switch (type)
     {
-      case "knight":
+      case CardId.Knight:
         return knightPrefab != null ? knightPrefab : GetDefaultCube();
-      case "archer":
+      case CardId.Archer:
         return archerPrefab != null ? archerPrefab : GetDefaultCube();
-      case "giant":
+      case CardId.Giant:
         return giantPrefab != null ? giantPrefab : GetDefaultCube();
-      case "tower":
-        return towerPrefab != null ? towerPrefab : GetDefaultCube();
-      case "kingtower":
+      case CardId.PrincessTower:
+        return princessTowerPrefab != null ? princessTowerPrefab : GetDefaultCube();
+      case CardId.KingTower:
         return kingTowerPrefab != null ? kingTowerPrefab : GetDefaultCube();
       default:
         return GetDefaultCube();

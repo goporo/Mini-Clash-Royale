@@ -1,5 +1,6 @@
 using Mirror;
 using UnityEngine;
+using ClashShared;
 
 namespace ClashServer
 {
@@ -58,8 +59,8 @@ namespace ClashServer
     // Called by MyNetworkManager when play card fails
     public void OnPlayCardFailed(string reason)
     {
-      Debug.LogWarning($"[Client] Play card failed: {reason}");
-      // TODO: Show error UI to player
+      Debug.Log($"[Client] Play card failed: {reason}");
+      BattleHand.Instance?.RestorePendingSlot();
     }
 
     public void OnMatchEnded(EntityTeam winner)
@@ -67,7 +68,25 @@ namespace ClashServer
       Debug.Log($"[Client] Match ended, winner: {winner}");
     }
 
-    public void PlayCard(int cardId, string type, Vector2 position)
+    public void OnElixirUpdated(int milliElixir)
+    {
+      if (BattleUI.Instance != null)
+        BattleUI.Instance.UpdateElixir(milliElixir);
+    }
+
+    public void OnHandStateReceived(HandStateMessage msg)
+    {
+      if (BattleHand.Instance != null)
+        BattleHand.Instance.InitHand(msg.Card0, msg.Card1, msg.Card2, msg.Card3, msg.NextCardId);
+    }
+
+    public void OnCardDrawn(CardDrawnMessage msg)
+    {
+      if (BattleHand.Instance != null)
+        BattleHand.Instance.OnServerCardDrawn(msg.PlayedCardId, msg.NewCardId, msg.NextCardId);
+    }
+
+    public void PlayCard(CardId cardId, Vector2 position)
     {
       if (!NetworkClient.isConnected)
       {
@@ -78,11 +97,10 @@ namespace ClashServer
       NetworkClient.Send(new PlayCardMessage
       {
         CardId = cardId,
-        Type = type,
         Position = Vector2Data.FromUnityVector2(position)
       });
 
-      Debug.Log($"[Client] Sent play card request: {type} at {position}");
+      Debug.Log($"[Client] Sent play card request: {cardId} at {position}");
     }
 
     void OnDestroy()

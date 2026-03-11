@@ -1,4 +1,5 @@
 using Mirror;
+using ClashShared;
 
 namespace ClashServer
 {
@@ -6,50 +7,41 @@ namespace ClashServer
   {
     public NetworkConnectionToClient Connection { get; set; }
     public EntityTeam Team { get; set; }
-    public float Elixir { get; set; }
-    public float ElixirPerSecond { get; set; }
-    public float MaxElixir { get; set; }
-    public int[] Deck { get; set; }
+    public ElixirState ElixirState { get; set; }
+    public BattleDeck Deck { get; set; }
 
     public PlayerState(NetworkConnectionToClient conn, EntityTeam team)
     {
       Connection = conn;
       Team = team;
-      Elixir = 5f;
-      ElixirPerSecond = 1f;
-      MaxElixir = 10f;
-      Deck = new int[] { 0, 1, 2, 3 };
+      ElixirState = new ElixirState();
+      Deck = new BattleDeck(new[]
+      {
+        CardId.Knight, CardId.Archer, CardId.Giant, CardId.Knight,
+        CardId.Knight, CardId.Archer, CardId.Giant, CardId.Knight
+      });
     }
 
-    public void UpdateElixir(float deltaTime)
+    public bool CanAffordCard(CardId cardId)
     {
-      Elixir += ElixirPerSecond * deltaTime;
-      if (Elixir > MaxElixir)
-        Elixir = MaxElixir;
+      return ElixirState.CanSpend(GetCardCostMilliElixir(cardId));
     }
 
-    public bool CanAffordCard(int cardId)
+    public void SpendElixir(CardId cardId)
     {
-      return true;
-      // float cost = GetCardCost(cardId);
-      // return Elixir >= cost;
+      ElixirState.TrySpend(GetCardCostMilliElixir(cardId));
     }
 
-    public void SpendElixir(int cardId)
-    {
-      float cost = GetCardCost(cardId);
-      Elixir -= cost;
-      if (Elixir < 0) Elixir = 0;
-    }
-
-    private float GetCardCost(int cardId)
+    private int GetCardCostMilliElixir(CardId cardId)
     {
       switch (cardId)
       {
-        case 0: return 3f; // Knight
-        case 1: return 3f; // Archer
-        case 2: return 5f; // Giant
-        default: return 3f;
+        case CardId.Knight: return 3000;
+        case CardId.Archer: return 3000;
+        case CardId.Giant: return 5000;
+        case CardId.Cannon: return 3000;
+        case CardId.Fireball: return 4000;
+        default: return 3000;
       }
     }
   }

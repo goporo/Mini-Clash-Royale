@@ -9,6 +9,9 @@ public class CardDragController : MonoBehaviour, IBeginDragHandler, IDragHandler
   private PlayerNetwork playerNetwork;
   public SpawnOverlayView spawnOverlay;
 
+  [Tooltip("Index of this slot in BattleHand.handSlots (0-3), for local UI cycling.")]
+  public int slotIndex;
+
   public struct RegionBounds
   {
     public float Left;
@@ -28,6 +31,13 @@ public class CardDragController : MonoBehaviour, IBeginDragHandler, IDragHandler
     RiverBottom = -1f,
     RiverTop = 1f
   };
+
+  public enum CardType
+  {
+    Knight = 0,
+    Archer = 1,
+    Giant = 2,
+  }
 
   private const float GRID_SIZE = ClientBoardState.GRID_SIZE;
 
@@ -106,10 +116,12 @@ public class CardDragController : MonoBehaviour, IBeginDragHandler, IDragHandler
       return;
     }
 
-    playerNetwork.PlayCard(1, "knight", new Vector2(spawnPos.x, spawnPos.z));
+    playerNetwork.PlayCard(slot.Config.CardId, new Vector2(spawnPos.x, spawnPos.z));
 
     preview.Hide();
     _previewActive = false;
+    // Optimistically update the slot locally; server confirms via CardDrawnMessage.
+    BattleHand.Instance?.OnLocalCardPlayed(slotIndex);
   }
 
   private Vector2 ValidateAndSnapPosition(Vector2 pos)

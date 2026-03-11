@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using ClashShared;
 
 namespace ClashServer
 {
@@ -16,15 +17,14 @@ namespace ClashServer
 
     // Building footprint sizes in world units (width × height).
     // Add new building types here as the card roster grows.
-    private static readonly Dictionary<string, (float w, float h)> buildingSizes =
-        new(StringComparer.OrdinalIgnoreCase)
+    private static readonly Dictionary<CardId, (float w, float h)> buildingSizes =
+        new()
     {
-      { "tower",     (3f, 3f) },
-      { "kingtower", (4f, 4f) },
-      { "block",     (1f, 1f) },
+      { CardId.PrincessTower, (3f, 3f) },
+      { CardId.KingTower,     (4f, 4f) },
     };
 
-    public static (float w, float h) GetBuildingSize(string type) =>
+    public static (float w, float h) GetBuildingSize(CardId type) =>
         buildingSizes.TryGetValue(type, out var s) ? s : (1f, 1f);
 
     // Grid cell → occupying entity (multiple cells can point to the same entity)
@@ -112,7 +112,7 @@ namespace ClashServer
     /// Returns all grid cells whose area [C*G, (C+1)*G) overlaps the building
     /// footprint centered at <paramref name="center"/>.
     /// </summary>
-    private static List<(int x, int y)> GetFootprintCells(Vector2 center, string type)
+    private static List<(int x, int y)> GetFootprintCells(Vector2 center, CardId type)
     {
       var (w, h) = GetBuildingSize(type);
 

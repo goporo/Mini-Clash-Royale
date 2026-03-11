@@ -9,9 +9,9 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b2549844e26e6754eaad95b9b4f868ee, type: 3}
-  m_Name: New Card Spawn Rules
+  m_Script: {fileID: 11500000, guid: c3795f6c3666dd74e9d17070afb70417, type: 3}
+  m_Name: ArcherCard
   m_EditorClassIdentifier: 
-  restrictToOwnSide: 1
-  restrictToLanes: 1
-  minDistanceFromEnemy: 0
+  CardId: 101
+  Cost: 3
+  Icon: {fileID: 21300000, guid: c20250c15b53e4c4b889cef526f66eed, type: 3}

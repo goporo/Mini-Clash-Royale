@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using ClashShared;
 
 namespace ClashServer
 {
@@ -16,14 +17,21 @@ namespace ClashServer
     private Dictionary<int, EntityState> lastSnapshotState = new Dictionary<int, EntityState>();
 
     private ILogger logger;
+    private BoardManager boardManager;
+
+    private const int PATH_RECALC_INTERVAL = 3; // ticks between path refreshes
 
     public GameplayDirector(ILogger logger = null)
     {
       this.logger = logger ?? new ConsoleLogger();
-
     }
 
-    // Main update loop - called every server tick
+    /// <summary>
+    /// Provide the shared BoardManager so pathfinding can query building occupancy.
+    /// Call this once after construction (e.g. from ServerMatchController).
+    /// </summary>
+    public void SetBoardManager(BoardManager bm) => boardManager = bm;
+
     public void Update()
     {
       currentTick++;
@@ -63,36 +71,64 @@ namespace ClashServer
 
     private void UpdateMovement(ServerEntity entity)
     {
-      // Try to acquire target if none (even for buildings)
-      if (entity.Target == null || !entity.Target.IsAlive)
+      // Acquire / refresh target
+      var newTarget = (entity.Target == null || !entity.Target.IsAlive)
+        ? AcquireTarget(entity)
+        : entity.Target;
+
+      // Clear cached path whenever the target changes
+      if (newTarget?.Id != entity.Target?.Id)
       {
-        entity.Target = AcquireTarget(entity);
+        entity.Path = null;
+        entity.Target = newTarget;
       }
 
       if (entity.IsBuilding) return;
 
+      // Stop moving once in attack range
       if (entity.Target != null && IsInRange(entity, entity.Target, entity.Stats.AttackRange))
       {
+        entity.Path = null;
         return;
       }
 
-      Vector2 direction;
+      // Choose movement goal
+      Vector2 goal = entity.Target != null
+        ? entity.Target.Position
+        : new Vector2(entity.Position.X, entity.Team == EntityTeam.Team1 ? NavGrid.WORLD_TOP : NavGrid.WORLD_BOTTOM);
 
-      if (entity.Target != null && entity.Target.IsAlive)
+      // (Re-)compute path when due or missing
+      if (boardManager != null &&
+          (entity.Path == null || currentTick >= entity.PathRecalcTick))
       {
-        direction = entity.Target.Position - entity.Position;
-        float lengthSq = direction.LengthSquared();
-        if (lengthSq > 0)
-          direction /= MathF.Sqrt(lengthSq);
+        entity.Path = Pathfinder.FindPath(entity.Position, goal, boardManager);
+        entity.PathRecalcTick = currentTick + (uint)PATH_RECALC_INTERVAL;
+      }
+
+      // Move along path
+      if (entity.Path != null && entity.Path.Count > 0)
+      {
+        Vector2 next = entity.Path[0];
+        Vector2 toNext = next - entity.Position;
+        float dist = toNext.Length();
+
+        if (dist <= entity.Stats.MovePerTick)
+        {
+          entity.Position = next;
+          entity.Path.RemoveAt(0);
+        }
         else
-          direction = Vector2.Zero;
-      }
-      else
-      {
-        direction = new Vector2(0, entity.Team == EntityTeam.Team1 ? 1 : -1);
+        {
+          entity.Position += (toNext / dist) * entity.Stats.MovePerTick;
+        }
+        return;
       }
 
-      entity.Position += direction * entity.Stats.MovePerTick;
+      // Fallback: straight-line movement (no board manager or no path)
+      Vector2 dir = goal - entity.Position;
+      float len = dir.Length();
+      if (len > 0)
+        entity.Position += (dir / len) * entity.Stats.MovePerTick;
     }
 
     private void CalculateAttack(ServerEntity entity, List<(ServerEntity attacker, ServerEntity target, float damage)> pendingAttacks)
@@ -144,7 +180,7 @@ namespace ClashServer
       return distSq <= range * range;
     }
 
-    public ServerEntity SpawnEntity(string type, Vector2 position, EntityTeam team, bool isBuilding = false)
+    public ServerEntity SpawnEntity(CardId type, Vector2 position, EntityTeam team, bool isBuilding = false)
     {
       var entity = new ServerEntity(nextEntityId++, type, position, team, isBuilding);
       entities.Add(entity);

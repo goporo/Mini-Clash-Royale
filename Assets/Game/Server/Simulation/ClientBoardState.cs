@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ClashShared;
 using UnityEngine;
 
 namespace ClashServer
@@ -15,21 +16,18 @@ namespace ClashServer
     public const float GRID_SIZE = 1f;
 
     // Building footprint sizes in world units – must mirror BoardManager.buildingSizes.
-    private static readonly Dictionary<string, (float w, float h)> buildingSizes =
-        new(StringComparer.OrdinalIgnoreCase)
+    private static readonly Dictionary<CardId, (float w, float h)> buildingSizes = new()
     {
-      { "tower",     (3f, 3f) },
-      { "kingtower", (4f, 4f) },
-      { "block",     (1f, 1f) },
+      { CardId.PrincessTower, (3f, 3f) },
+      { CardId.KingTower, (4f, 4f) },
+      { CardId.Block, (1f, 1f) },
     };
 
-    // Occupied tile set.
     private static readonly HashSet<(int x, int y)> occupiedCells = new();
 
     // Id → (position, type) so delta removals can unregister the right cells.
-    private static readonly Dictionary<int, (Vector2 pos, string type)> buildingById = new();
+    private static readonly Dictionary<int, (Vector2 pos, CardId type)> buildingById = new();
 
-    // ─── Public API ─────────────────────────────────────────────────────────
 
     /// <summary>Full rebuild from a snapshot (call on connect / reconnect).</summary>
     public static void RebuildFromSnapshot(FullSnapshot snapshot)
@@ -72,7 +70,7 @@ namespace ClashServer
 
     // ─── Helpers ─────────────────────────────────────────────────────────────
 
-    private static void Register(int id, Vector2 pos, string type)
+    private static void Register(int id, Vector2 pos, CardId type)
     {
       buildingById[id] = (pos, type);
       foreach (var cell in GetFootprintCells(pos, type))
@@ -83,7 +81,7 @@ namespace ClashServer
     /// All cells whose area [C*G, (C+1)*G) overlaps the building footprint.
     /// Uses the same formula as BoardManager.GetFootprintCells.
     /// </summary>
-    private static IEnumerable<(int x, int y)> GetFootprintCells(Vector2 center, string type)
+    private static IEnumerable<(int x, int y)> GetFootprintCells(Vector2 center, CardId type)
     {
       var (w, h) = buildingSizes.TryGetValue(type, out var s) ? s : (1f, 1f);
 

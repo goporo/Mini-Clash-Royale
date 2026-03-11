@@ -1,4 +1,5 @@
 using Mirror;
+using ClashShared;
 
 namespace ClashServer
 {
@@ -11,6 +12,9 @@ namespace ClashServer
     public const short PlayCardFailed = 1003;
     public const short MatchEnded = 1004;
     public const short ClientReady = 1005;
+    public const short ElixirUpdate = 1006;
+    public const short HandState = 1007;
+    public const short CardDrawn = 1008;
   }
 
   // Client → Server: Client is ready to receive snapshots
@@ -33,9 +37,8 @@ namespace ClashServer
   // Client → Server: Play a card
   public struct PlayCardMessage : NetworkMessage
   {
-    public int CardId;
-    public string Type;
-    public Vector2Data Position; // Use Vector2Data for network serialization
+    public CardId CardId;
+    public Vector2Data Position;
   }
 
   // Server → Specific Client: Card play failed
@@ -48,5 +51,29 @@ namespace ClashServer
   public struct MatchEndedMessage : NetworkMessage
   {
     public EntityTeam Winner;
+  }
+
+  // Server → Specific Client: Elixir value update
+  public struct ElixirUpdateMessage : NetworkMessage
+  {
+    public int MilliElixir;
+  }
+
+  // Server → Specific Client: Initial hand state (sent on client ready)
+  public struct HandStateMessage : NetworkMessage
+  {
+    public CardId Card0;
+    public CardId Card1;
+    public CardId Card2;
+    public CardId Card3;
+    public CardId NextCardId;
+  }
+
+  // Server → Specific Client: Card drawn after a successful play
+  public struct CardDrawnMessage : NetworkMessage
+  {
+    public CardId PlayedCardId;
+    public CardId NewCardId;
+    public CardId NextCardId;
   }
 }

@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
+using ClashShared;
 
 namespace ClashServer
 {
@@ -50,14 +52,18 @@ namespace ClashServer
     public int Id { get; set; }
     public Vector2 Position { get; set; }
     public EntityTeam Team { get; set; }
-    public string Type { get; set; }
+    public CardId Type { get; set; }
     public EntityStats Stats { get; set; }
     public ServerEntity Target { get; set; }
     public bool IsAlive { get; set; }
     public int AttackCooldownTicks { get; set; }
     public bool IsBuilding { get; set; }
 
-    public ServerEntity(int id, string type, Vector2 position, EntityTeam team, bool isBuilding = false)
+    // Pathfinding state
+    public List<Vector2> Path { get; set; }
+    public uint PathRecalcTick { get; set; }
+
+    public ServerEntity(int id, CardId type, Vector2 position, EntityTeam team, bool isBuilding = false)
     {
       Id = id;
       Type = type;
@@ -69,22 +75,20 @@ namespace ClashServer
       Stats = GetStatsForType(type);
     }
 
-    private static EntityStats GetStatsForType(string type)
+    private static EntityStats GetStatsForType(CardId type)
     {
-      switch (type.ToLower())
+      switch (type)
       {
-        case "knight":
+        case CardId.Knight:
           return new EntityStats(100, 2f, 1.5f, 20f, 1.0f, 5f);
-        case "archer":
+        case CardId.Archer:
           return new EntityStats(50, 1.5f, 5f, 15f, 1f, 6f);
-        case "giant":
+        case CardId.Giant:
           return new EntityStats(300, 1f, 1.5f, 40f, 1f, 5f);
-        case "tower":
+        case CardId.PrincessTower:
           return new EntityStats(500, 0f, 6f, 10f, 1f, 6f);
-        case "kingtower":
+        case CardId.KingTower:
           return new EntityStats(1000, 0f, 7f, 10f, 1.2f, 7f);
-        case "block":
-          return new EntityStats(999, 0f, 0f, 0f, 0f, 0f);
         default:
           return new EntityStats(100, 2f, 1.5f, 20f, 1.5f, 5f);
       }

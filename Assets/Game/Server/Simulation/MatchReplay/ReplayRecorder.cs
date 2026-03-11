@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using ClashShared;
 
 namespace ClashServer
 {
@@ -206,7 +207,7 @@ namespace ClashServer
         Tick = int.Parse(parts[0]),
         PlayerId = int.Parse(parts[1]),
         Type = (CommandType)Enum.Parse(typeof(CommandType), parts[2]),
-        CardId = int.Parse(parts[3]),
+        CardId = (CardId)Enum.Parse(typeof(CardId), parts[3]),
         Position = new System.Numerics.Vector2(float.Parse(parts[4]), float.Parse(parts[5])),
         TargetTile = int.Parse(parts[6])
       };

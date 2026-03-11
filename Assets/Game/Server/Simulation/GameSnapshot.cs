@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using ClashShared;
 
 namespace ClashServer
 {
@@ -49,7 +50,7 @@ namespace ClashServer
     public int Id;
     public Vector2Data Position;
     public EntityTeam Team;
-    public string Type;
+    public CardId Type;
     public float CurrentHP;
     public float MaxHP;
     public int TargetId; // -1 means no target

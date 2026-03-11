@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using ClashShared;
 
 namespace ClashServer
 {
@@ -14,7 +15,7 @@ namespace ClashServer
     public int Tick;
     public int PlayerId;
     public CommandType Type;
-    public int CardId;          // For PlayCard
+    public CardId CardId;       // For PlayCard
     public Vector2 Position;    // For PlayCard spawn position
     public int TargetTile;      // For future use (if needed)
 
@@ -23,12 +24,12 @@ namespace ClashServer
       Tick = tick;
       PlayerId = playerId;
       Type = type;
-      CardId = -1;
+      CardId = CardId.None;
       Position = Vector2.Zero;
       TargetTile = -1;
     }
 
-    public static MatchCommand PlayCard(int tick, int playerId, int cardId, Vector2 position)
+    public static MatchCommand PlayCard(int tick, int playerId, CardId cardId, Vector2 position)
     {
       return new MatchCommand
       {
@@ -48,7 +49,7 @@ namespace ClashServer
         Tick = tick,
         PlayerId = playerId,
         Type = CommandType.Surrender,
-        CardId = -1,
+        CardId = CardId.None,
         Position = Vector2.Zero,
         TargetTile = -1
       };

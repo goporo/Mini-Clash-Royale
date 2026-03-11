@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Collections.Generic;
 using Unity.Services.Relay.Models;
 using System.Diagnostics;
+using ClashShared;
 
 namespace ClashServer
 {
@@ -117,7 +118,6 @@ namespace ClashServer
     {
       EntityTeam team = cmd.PlayerId == 0 ? EntityTeam.Team1 : EntityTeam.Team2;
 
-      string entityType = MapCardIdToType(cmd.CardId);
       RegionBounds bounds = new()
       {
         Left = -9f,
@@ -135,10 +135,9 @@ namespace ClashServer
       }
 
       bool isBuilding = cardType == CardType.Building;
-      var entity = director.SpawnEntity(entityType, cmd.Position, team, isBuilding);
+      var entity = director.SpawnEntity(cmd.CardId, cmd.Position, team, isBuilding);
       if (isBuilding)
         boardManager.PlaceBuilding(entity);
-      logger.Log($"[MatchManager] Applied PlayCard: {entityType} at {cmd.Position} for Team {team}");
     }
 
     private bool ValidateSpawn(CardType cardType, Vector2 pos, EntityTeam team, RegionBounds bounds)
@@ -199,22 +198,12 @@ namespace ClashServer
       logger.Log($"[MatchManager] Player {cmd.PlayerId} surrendered. Winner: {opposingTeam}");
     }
 
-    private string MapCardIdToType(int cardId)
+    private CardType MapCardIdToCardType(CardId cardId)
     {
       return cardId switch
       {
-        0 => "knight",
-        1 => "archer",
-        2 => "giant",
-        _ => "knight"
-      };
-    }
-
-    private CardType MapCardIdToCardType(int cardId)
-    {
-      return cardId switch
-      {
-        // Add building card IDs here as new cards are implemented
+        CardId.Cannon => CardType.Building,
+        // CardId.Fireball => CardType.Spell,  // uncomment when spell logic is added
         _ => CardType.Troop
       };
     }
@@ -226,9 +215,9 @@ namespace ClashServer
       currentMatchTick++;
 
       var team1Towers = director.GetEntitiesByTeam(EntityTeam.Team1)
-          .Where(e => e.Type.Contains("tower")).ToList();
+          .Where(e => e.Type == CardId.PrincessTower || e.Type == CardId.KingTower).ToList();
       var team2Towers = director.GetEntitiesByTeam(EntityTeam.Team2)
-          .Where(e => e.Type.Contains("tower")).ToList();
+          .Where(e => e.Type == CardId.PrincessTower || e.Type == CardId.KingTower).ToList();
 
       // Win condition 1: All towers destroyed (immediate win)
       if (team1Towers.Count == 0)
@@ -265,9 +254,9 @@ namespace ClashServer
       if (matchOver) return;
 
       var team1Towers = director.GetEntitiesByTeam(EntityTeam.Team1)
-          .Where(e => e.Type.Contains("tower")).ToList();
+          .Where(e => e.Type == CardId.PrincessTower || e.Type == CardId.KingTower).ToList();
       var team2Towers = director.GetEntitiesByTeam(EntityTeam.Team2)
-          .Where(e => e.Type.Contains("tower")).ToList();
+          .Where(e => e.Type == CardId.PrincessTower || e.Type == CardId.KingTower).ToList();
 
       // More towers standing = winner (fewer destroyed)
       if (team1Towers.Count > team2Towers.Count)
@@ -329,7 +318,7 @@ namespace ClashServer
         aiSpawnCooldownTicks = aiSpawnIntervalTicks;
 
         // Return command to be queued
-        return MatchCommand.PlayCard(currentTick, 1, 0, spawnPos);
+        return MatchCommand.PlayCard(currentTick, 1, CardId.Knight, spawnPos);
       }
 
       return null;

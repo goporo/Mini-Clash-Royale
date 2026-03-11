@@ -10,8 +10,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c3795f6c3666dd74e9d17070afb70417, type: 3}
-  m_Name: KnightCard
+  m_Name: GiantCard
   m_EditorClassIdentifier: 
-  CardId: 100
-  Cost: 3
-  Icon: {fileID: 21300000, guid: ca271021a4dc9bb40b793af61af2da7e, type: 3}
+  CardId: 102
+  Cost: 5
+  Icon: {fileID: 21300000, guid: 4faeb92d75711714fad733758219206e, type: 3}

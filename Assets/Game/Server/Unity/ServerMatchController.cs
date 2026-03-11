@@ -2,6 +2,7 @@ using Mirror;
 using UnityEngine;
 using System.Collections.Generic;
 using System.Linq;
+using ClashShared;
 
 namespace ClashServer
 {
@@ -45,6 +46,7 @@ namespace ClashServer
       var logger = new UnityLogger();
       gameplayDirector = new GameplayDirector(logger);
       matchManager = new MatchManager(logger);
+      gameplayDirector.SetBoardManager(matchManager.BoardManager);
       players = new Dictionary<NetworkConnectionToClient, PlayerState>();
       clientsNeedingFullSnapshot = new HashSet<NetworkConnectionToClient>();
 
@@ -80,6 +82,20 @@ namespace ClashServer
         clientsNeedingFullSnapshot.Add(conn);
         Debug.Log($"[Server] Client {conn.connectionId} is ready, will receive full snapshot");
       }
+
+      // Send initial hand state so client display matches server-held deck
+      if (players.TryGetValue(conn, out var playerState))
+      {
+        var deck = playerState.Deck;
+        conn.Send(new HandStateMessage
+        {
+          Card0 = deck.Hand[0],
+          Card1 = deck.Hand[1],
+          Card2 = deck.Hand[2],
+          Card3 = deck.Hand[3],
+          NextCardId = deck.NextCardId
+        });
+      }
     }
 
     private void InitializeMatch()
@@ -87,15 +103,14 @@ namespace ClashServer
       var board = matchManager.BoardManager;
 
       // Team 1 (bottom)
-      board.PlaceBuilding(gameplayDirector.SpawnEntity("block", new System.Numerics.Vector2(0f, 0f), EntityTeam.Team1, true));
-      board.PlaceBuilding(gameplayDirector.SpawnEntity("kingtower", new System.Numerics.Vector2(0f, -13f), EntityTeam.Team1, true));
-      board.PlaceBuilding(gameplayDirector.SpawnEntity("tower", new System.Numerics.Vector2(-5.5f, -10.5f), EntityTeam.Team1, true));
-      board.PlaceBuilding(gameplayDirector.SpawnEntity("tower", new System.Numerics.Vector2(5.5f, -10.5f), EntityTeam.Team1, true));
+      board.PlaceBuilding(gameplayDirector.SpawnEntity(CardId.KingTower, new System.Numerics.Vector2(0f, -13f), EntityTeam.Team1, true));
+      board.PlaceBuilding(gameplayDirector.SpawnEntity(CardId.PrincessTower, new System.Numerics.Vector2(-5.5f, -10.5f), EntityTeam.Team1, true));
+      board.PlaceBuilding(gameplayDirector.SpawnEntity(CardId.PrincessTower, new System.Numerics.Vector2(5.5f, -10.5f), EntityTeam.Team1, true));
 
       // Team 2 (top)
-      board.PlaceBuilding(gameplayDirector.SpawnEntity("kingtower", new System.Numerics.Vector2(0f, 13f), EntityTeam.Team2, true));
-      board.PlaceBuilding(gameplayDirector.SpawnEntity("tower", new System.Numerics.Vector2(-5.5f, 10.5f), EntityTeam.Team2, true));
-      board.PlaceBuilding(gameplayDirector.SpawnEntity("tower", new System.Numerics.Vector2(5.5f, 10.5f), EntityTeam.Team2, true));
+      board.PlaceBuilding(gameplayDirector.SpawnEntity(CardId.KingTower, new System.Numerics.Vector2(0f, 13f), EntityTeam.Team2, true));
+      board.PlaceBuilding(gameplayDirector.SpawnEntity(CardId.PrincessTower, new System.Numerics.Vector2(-5.5f, 10.5f), EntityTeam.Team2, true));
+      board.PlaceBuilding(gameplayDirector.SpawnEntity(CardId.PrincessTower, new System.Numerics.Vector2(5.5f, 10.5f), EntityTeam.Team2, true));
 
       gameplayDirector.ResetSnapshotTracking();
 
@@ -128,6 +143,12 @@ namespace ClashServer
     private void AdvanceTick()
     {
       currentTick++;
+
+      // Tick elixir regen for all players
+      foreach (var playerState in players.Values)
+      {
+        playerState.ElixirState.TickRegen();
+      }
 
       // Process queued commands for this tick BEFORE simulation
       matchManager.ProcessCommandsForTick(currentTick, gameplayDirector);
@@ -199,8 +220,7 @@ namespace ClashServer
 
     public void Server_PlayCard(
         NetworkConnectionToClient sender,
-        int cardId,
-        string type,
+        CardId cardId,
         System.Numerics.Vector2 position)
     {
       if (!players.ContainsKey(sender))
@@ -211,10 +231,18 @@ namespace ClashServer
 
       PlayerState playerState = players[sender];
 
+      // Anti-cheat: verify the card exists in the player's current hand
+      if (!playerState.Deck.IsInHand(cardId))
+      {
+        Debug.LogWarning($"[Server] Card {cardId} not in hand");
+        SendPlayCardFailed(sender, "Card not in hand");
+        return;
+      }
+
       // Validation BEFORE creating command
       if (!playerState.CanAffordCard(cardId))
       {
-        Debug.LogWarning($"[Server] Player cannot afford card {cardId}");
+        Debug.Log($"[Server] Player cannot afford card {cardId}");
         SendPlayCardFailed(sender, "Not enough elixir");
         return;
       }
@@ -241,8 +269,15 @@ namespace ClashServer
       // Queue command for execution (will execute at next tick)
       matchManager.QueueCommand(command);
 
-      // Spend elixir
+      // Spend elixir, cycle the deck, notify client of the drawn card
       playerState.SpendElixir(cardId);
+      playerState.Deck.TryPlay(cardId, out CardId drawnCardId);
+      sender.Send(new CardDrawnMessage
+      {
+        PlayedCardId = cardId,
+        NewCardId = drawnCardId,
+        NextCardId = playerState.Deck.NextCardId
+      });
 
       Debug.Log($"[Server] Player {playerId} queued PlayCard for tick {executionTick}: card={cardId} at {position}");
     }
@@ -258,6 +293,12 @@ namespace ClashServer
       {
         SendFullSnapshot(conn);
         clientsNeedingFullSnapshot.Remove(conn);
+      }
+
+      // Send each player their current elixir
+      foreach (var kvp in players)
+      {
+        kvp.Key.Send(new ElixirUpdateMessage { MilliElixir = kvp.Value.ElixirState.Current });
       }
 
       DeltaSnapshot delta = gameplayDirector.GenerateDeltaSnapshot();

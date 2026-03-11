@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ClashShared;
 
 namespace ClashServer
 {
@@ -101,14 +102,14 @@ namespace ClashServer
     private void InitializeMatch()
     {
       // Team 1 (bottom)
-      director.SpawnEntity("kingtower", new System.Numerics.Vector2(0, -6), EntityTeam.Team1, true);
-      director.SpawnEntity("tower", new System.Numerics.Vector2(-5, -3), EntityTeam.Team1, true);
-      director.SpawnEntity("tower", new System.Numerics.Vector2(5, -3), EntityTeam.Team1, true);
+      director.SpawnEntity(CardId.KingTower, new System.Numerics.Vector2(0, -6), EntityTeam.Team1, true);
+      director.SpawnEntity(CardId.PrincessTower, new System.Numerics.Vector2(-5, -3), EntityTeam.Team1, true);
+      director.SpawnEntity(CardId.PrincessTower, new System.Numerics.Vector2(5, -3), EntityTeam.Team1, true);
 
       // Team 2 (top)
-      director.SpawnEntity("kingtower", new System.Numerics.Vector2(0, 18), EntityTeam.Team2, true);
-      director.SpawnEntity("tower", new System.Numerics.Vector2(-5, 15), EntityTeam.Team2, true);
-      director.SpawnEntity("tower", new System.Numerics.Vector2(5, 15), EntityTeam.Team2, true);
+      director.SpawnEntity(CardId.KingTower, new System.Numerics.Vector2(0, 18), EntityTeam.Team2, true);
+      director.SpawnEntity(CardId.PrincessTower, new System.Numerics.Vector2(-5, 15), EntityTeam.Team2, true);
+      director.SpawnEntity(CardId.PrincessTower, new System.Numerics.Vector2(5, 15), EntityTeam.Team2, true);
 
       logger.Log("[Replay] Match initialized");
     }
@@ -154,29 +155,14 @@ namespace ClashServer
       // Determine team based on player ID (simple mapping)
       EntityTeam team = cmd.PlayerId == 0 ? EntityTeam.Team1 : EntityTeam.Team2;
 
-      // Map card ID to entity type (simplified)
-      string entityType = MapCardIdToType(cmd.CardId);
-
-      director.SpawnEntity(entityType, cmd.Position, team);
-      logger.Log($"[Replay T{currentTick}] Player {cmd.PlayerId} played {entityType} at {cmd.Position}");
+      director.SpawnEntity(cmd.CardId, cmd.Position, team);
+      logger.Log($"[Replay T{currentTick}] Player {cmd.PlayerId} played {cmd.CardId} at {cmd.Position}");
     }
 
     private void ApplySurrender(MatchCommand cmd)
     {
       logger.Log($"[Replay T{currentTick}] Player {cmd.PlayerId} surrendered");
       // Implement surrender logic if needed
-    }
-
-    private string MapCardIdToType(int cardId)
-    {
-      // Simple mapping - extend as needed
-      return cardId switch
-      {
-        0 => "knight",
-        1 => "archer",
-        2 => "giant",
-        _ => "knight"
-      };
     }
 
     private void DetectDrift()
