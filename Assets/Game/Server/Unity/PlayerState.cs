@@ -17,8 +17,8 @@ namespace ClashServer
       ElixirState = new ElixirState();
       Deck = new BattleDeck(new[]
       {
-        CardId.Knight, CardId.Archer, CardId.Giant, CardId.Knight,
-        CardId.Knight, CardId.Archer, CardId.Giant, CardId.Knight
+        CardId.Fireball, CardId.Archer, CardId.Goblin, CardId.Cannon,
+        CardId.Knight, CardId.MiniPekka, CardId.Giant, CardId.Musketeer
       });
     }
 
@@ -40,7 +40,10 @@ namespace ClashServer
         case CardId.Archer: return 3000;
         case CardId.Giant: return 5000;
         case CardId.Cannon: return 3000;
+        case CardId.Goblin: return 2000;
         case CardId.Fireball: return 4000;
+        case CardId.Musketeer: return 4000;
+        case CardId.MiniPekka: return 4000;
         default: return 3000;
       }
     }

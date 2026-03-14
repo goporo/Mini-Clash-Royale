@@ -18,16 +18,71 @@ public class EntityViewManager : MonoBehaviour
     public CardId type;
     public EntityTeam team;
     public bool isBuilding;
+    public float footprintRadius;
+  }
+
+  private static float GetFootprintRadius(CardId type) => type switch
+  {
+    CardId.PrincessTower => 1.5f,
+    CardId.KingTower => 2.0f,
+    CardId.Cannon => 1.5f,
+    _ => 0f,
+  };
+
+  private static Color GetBaseColor(EntityViewData data)
+  {
+    if (data.isBuilding) return Color.yellow;
+    return data.team == EntityTeam.Team1 ? Color.blue : Color.red;
+  }
+
+  private static void ApplyEntityColor(EntityViewData data)
+  {
+    Renderer r = data.go?.GetComponent<Renderer>();
+    if (r == null) return;
+    float hp = data.currentHP / data.maxHP;
+    Color baseColor = GetBaseColor(data);
+    r.material.color = hp < 0.5f ? Color.Lerp(Color.black, baseColor, hp + 0.5f) : baseColor;
+  }
+
+  public void SetSpellHighlight(Vector3 worldCenter, float spellRadius)
+  {
+    foreach (var kvp in entityViews)
+    {
+      EntityViewData data = kvp.Value;
+      Renderer r = data.go?.GetComponent<Renderer>();
+      if (r == null) continue;
+
+      float dist = Vector2.Distance(
+        new Vector2(worldCenter.x, worldCenter.z),
+        new Vector2(data.targetPosition.x, data.targetPosition.z));
+
+      if (dist <= spellRadius + data.footprintRadius)
+        r.material.color = Color.white;
+      else
+        ApplyEntityColor(data);
+    }
+  }
+
+  public void ClearSpellHighlight()
+  {
+    foreach (var kvp in entityViews)
+      ApplyEntityColor(kvp.Value);
   }
 
   private Dictionary<int, EntityViewData> entityViews = new Dictionary<int, EntityViewData>();
 
   [Header("Visual Prefabs")]
+  public GameObject princessTowerPrefab;
+  public GameObject kingTowerPrefab;
   public GameObject knightPrefab;
   public GameObject archerPrefab;
   public GameObject giantPrefab;
-  public GameObject princessTowerPrefab;
-  public GameObject kingTowerPrefab;
+  public GameObject cannonPrefab;
+  public GameObject goblinPrefab;
+  public GameObject fireballPrefab;
+  public GameObject musketeerPrefab;
+  public GameObject miniPekkaPrefab;
+
 
   [Header("Fallback Visual")]
   public GameObject cubePrefab;
@@ -59,16 +114,6 @@ public class EntityViewManager : MonoBehaviour
       GameObject go = Instantiate(prefab, worldPos, Quaternion.identity);
       go.name = $"Entity_{entityData.Id}_{entityData.Type}";
 
-      // Color by team
-      Renderer renderer = go.GetComponent<Renderer>();
-      if (renderer != null)
-      {
-        if (entityData.IsBuilding)
-          renderer.material.color = Color.yellow;
-        else
-          renderer.material.color = entityData.Team == EntityTeam.Team1 ? Color.blue : Color.red;
-      }
-
       entityViews[entityData.Id] = new EntityViewData
       {
         go = go,
@@ -77,7 +122,8 @@ public class EntityViewManager : MonoBehaviour
         maxHP = entityData.MaxHP,
         type = entityData.Type,
         team = entityData.Team,
-        isBuilding = entityData.IsBuilding
+        isBuilding = entityData.IsBuilding,
+        footprintRadius = GetFootprintRadius(entityData.Type)
       };
 
       EntityView entityView = go.GetComponent<EntityView>();
@@ -106,16 +152,6 @@ public class EntityViewManager : MonoBehaviour
       GameObject go = Instantiate(prefab, worldPos, Quaternion.identity);
       go.name = $"Entity_{entityData.Id}_{entityData.Type}";
 
-      // Color by team
-      Renderer renderer = go.GetComponent<Renderer>();
-      if (renderer != null)
-      {
-        if (entityData.IsBuilding)
-          renderer.material.color = Color.yellow;
-        else
-          renderer.material.color = entityData.Team == EntityTeam.Team1 ? Color.blue : Color.red;
-      }
-
       entityViews[entityData.Id] = new EntityViewData
       {
         go = go,
@@ -124,7 +160,8 @@ public class EntityViewManager : MonoBehaviour
         maxHP = entityData.MaxHP,
         type = entityData.Type,
         team = entityData.Team,
-        isBuilding = entityData.IsBuilding
+        isBuilding = entityData.IsBuilding,
+        footprintRadius = GetFootprintRadius(entityData.Type)
       };
 
       EntityView entityView = go.GetComponent<EntityView>();
@@ -176,15 +213,25 @@ public class EntityViewManager : MonoBehaviour
     switch (type)
     {
       case CardId.Knight:
-        return knightPrefab != null ? knightPrefab : GetDefaultCube();
+        return knightPrefab;
       case CardId.Archer:
-        return archerPrefab != null ? archerPrefab : GetDefaultCube();
+        return archerPrefab;
       case CardId.Giant:
-        return giantPrefab != null ? giantPrefab : GetDefaultCube();
+        return giantPrefab;
+      case CardId.Cannon:
+        return cannonPrefab;
       case CardId.PrincessTower:
-        return princessTowerPrefab != null ? princessTowerPrefab : GetDefaultCube();
+        return princessTowerPrefab;
       case CardId.KingTower:
-        return kingTowerPrefab != null ? kingTowerPrefab : GetDefaultCube();
+        return kingTowerPrefab;
+      case CardId.Goblin:
+        return goblinPrefab;
+      case CardId.Fireball:
+        return fireballPrefab;
+      case CardId.Musketeer:
+        return musketeerPrefab;
+      case CardId.MiniPekka:
+        return miniPekkaPrefab;
       default:
         return GetDefaultCube();
     }
@@ -203,25 +250,13 @@ public class EntityViewManager : MonoBehaviour
 
   private void UpdateHealthBar(EntityViewData data)
   {
-    float hpPercent = data.currentHP / data.maxHP;
-
     if (data.go != null)
     {
       EntityView entityView = data.go.GetComponent<EntityView>();
       if (entityView != null)
-      {
         entityView.SetHealth((int)data.currentHP, (int)data.maxHP);
-      }
 
-      Renderer renderer = data.go.GetComponent<Renderer>();
-      if (renderer != null && hpPercent < 0.5f)
-      {
-        Color baseColor = data.team == EntityTeam.Team1 ? Color.blue : Color.red;
-        if (data.isBuilding)
-          baseColor = Color.yellow;
-
-        renderer.material.color = Color.Lerp(Color.black, baseColor, hpPercent + 0.5f);
-      }
+      ApplyEntityColor(data);
     }
   }
 

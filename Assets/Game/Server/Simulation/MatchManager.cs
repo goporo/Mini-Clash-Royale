@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Unity.Services.Relay.Models;
 using System.Diagnostics;
 using ClashShared;
+using System;
 
 namespace ClashServer
 {
@@ -101,16 +102,23 @@ namespace ClashServer
 
     private void ApplyCommand(MatchCommand cmd, GameplayDirector director)
     {
-      switch (cmd.Type)
+      try
       {
-        case CommandType.PlayCard:
-          ApplyPlayCard(cmd, director);
-          break;
-        case CommandType.Surrender:
-          ApplySurrender(cmd);
-          break;
-        case CommandType.Emote:
-          break;
+        switch (cmd.Type)
+        {
+          case CommandType.PlayCard:
+            ApplyPlayCard(cmd, director);
+            break;
+          case CommandType.Surrender:
+            ApplySurrender(cmd);
+            break;
+          case CommandType.Emote:
+            break;
+        }
+      }
+      catch (Exception ex)
+      {
+        logger.LogWarning($"[MatchManager] Command failed (player {cmd.PlayerId}): {ex.Message}");
       }
     }
 
@@ -135,9 +143,17 @@ namespace ClashServer
       }
 
       bool isBuilding = cardType == CardType.Building;
-      var entity = director.SpawnEntity(cmd.CardId, cmd.Position, team, isBuilding);
-      if (isBuilding)
-        boardManager.PlaceBuilding(entity);
+      SpawnFormation formation = isBuilding ? SpawnFormation.Single : MapCardIdToFormation(cmd.CardId);
+
+      if (cardType == CardType.Spell)
+      {
+        director.ApplySpellEffect(cmd.CardId, cmd.Position, team);
+        return;
+      }
+
+      var spawnedEntities = director.SpawnCard(cmd.CardId, cmd.Position, team, formation, isBuilding);
+      if (isBuilding && spawnedEntities.Count > 0)
+        boardManager.PlaceBuilding(spawnedEntities[0]);
     }
 
     private bool ValidateSpawn(CardType cardType, Vector2 pos, EntityTeam team, RegionBounds bounds)
@@ -203,10 +219,17 @@ namespace ClashServer
       return cardId switch
       {
         CardId.Cannon => CardType.Building,
-        // CardId.Fireball => CardType.Spell,  // uncomment when spell logic is added
+        CardId.Fireball => CardType.Spell,  // uncomment when spell logic is added
         _ => CardType.Troop
       };
     }
+
+    private SpawnFormation MapCardIdToFormation(CardId cardId) => cardId switch
+    {
+      CardId.Archer => SpawnFormation.DuoLine,
+      CardId.Goblin => SpawnFormation.Square,
+      _ => SpawnFormation.Single
+    };
 
     public void UpdateMatchState(GameplayDirector director)
     {
@@ -318,7 +341,7 @@ namespace ClashServer
         aiSpawnCooldownTicks = aiSpawnIntervalTicks;
 
         // Return command to be queued
-        return MatchCommand.PlayCard(currentTick, 1, CardId.Knight, spawnPos);
+        return MatchCommand.PlayCard(currentTick, 1, (CardId)random.Next((int)CardId.Knight, (int)CardId.Cannon + 1), spawnPos);
       }
 
       return null;

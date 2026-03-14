@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
 using ClashServer;
+using ClashShared;
 
 public class CardDragController : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
 {
@@ -32,12 +33,6 @@ public class CardDragController : MonoBehaviour, IBeginDragHandler, IDragHandler
     RiverTop = 1f
   };
 
-  public enum CardType
-  {
-    Knight = 0,
-    Archer = 1,
-    Giant = 2,
-  }
 
   private const float GRID_SIZE = ClientBoardState.GRID_SIZE;
 
@@ -55,7 +50,15 @@ public class CardDragController : MonoBehaviour, IBeginDragHandler, IDragHandler
   {
     _cardInitialScreenPos = slot.transform.position;
     _previewActive = false;
-    spawnOverlay.SetState(SpawnOverlayState.Full);
+    var state = GetCurrentOverlayState();
+    spawnOverlay.SetState(state);
+  }
+
+  private SpawnOverlayState GetCurrentOverlayState()
+  {
+    if (slot.Config.CardType == CardType.Spell)
+      return SpawnOverlayState.None;
+    return SpawnOverlayState.Full;
   }
 
   public void OnDrag(PointerEventData eventData)
@@ -72,7 +75,7 @@ public class CardDragController : MonoBehaviour, IBeginDragHandler, IDragHandler
         preview.Show(slot.Config);
         _previewActive = true;
       }
-      Vector2 snapped = ValidateAndSnapPosition(new Vector2(worldPos.x, worldPos.z));
+      Vector2 snapped = ValidateAndSnapPosition(new Vector2(worldPos.x, worldPos.z), slot.Config.PlacementRule);
       preview.UpdatePosition(new Vector3(snapped.x, worldPos.y, snapped.y));
     }
     else
@@ -105,7 +108,7 @@ public class CardDragController : MonoBehaviour, IBeginDragHandler, IDragHandler
       return;
     }
 
-    Vector2 validated = ValidateAndSnapPosition(new Vector2(worldPos.x, worldPos.z));
+    Vector2 validated = ValidateAndSnapPosition(new Vector2(worldPos.x, worldPos.z), slot.Config.PlacementRule);
     Vector3 spawnPos = new(validated.x, 0.5f, validated.y);
 
     playerNetwork = PlayerNetwork.LocalPlayer;
@@ -124,31 +127,41 @@ public class CardDragController : MonoBehaviour, IBeginDragHandler, IDragHandler
     BattleHand.Instance?.OnLocalCardPlayed(slotIndex);
   }
 
-  private Vector2 ValidateAndSnapPosition(Vector2 pos)
+  private Vector2 ValidateAndSnapPosition(Vector2 pos, PlacementRule rule)
   {
-    // Clamp cursor to the local team deploy region
+    // Determine allowed Y bounds based on placement rule
+    float minY = bounds.Bottom;
+    float maxY = bounds.RiverBottom;
+    if (rule == PlacementRule.Anywhere)
+    {
+      maxY = bounds.Top;
+    }
+
+    // Clamp cursor to the allowed region
     float wx = Mathf.Clamp(pos.x, bounds.Left, bounds.Right);
-    float wy = Mathf.Clamp(pos.y, bounds.Bottom, bounds.RiverBottom);
+    float wy = Mathf.Clamp(pos.y, minY, maxY);
 
     // Cell bounds for the deploy region (cells whose CENTER is inside the region)
     int minCX = Mathf.FloorToInt((bounds.Left + GRID_SIZE * 0.5f) / GRID_SIZE);
     int maxCX = Mathf.FloorToInt((bounds.Right - GRID_SIZE * 0.5f) / GRID_SIZE);
-    int minCY = Mathf.FloorToInt((bounds.Bottom + GRID_SIZE * 0.5f) / GRID_SIZE);
-    int maxCY = Mathf.FloorToInt((bounds.RiverBottom - GRID_SIZE * 0.5f) / GRID_SIZE);
+    int minCY = Mathf.FloorToInt((minY + GRID_SIZE * 0.5f) / GRID_SIZE);
+    int maxCY = Mathf.FloorToInt((maxY - GRID_SIZE * 0.5f) / GRID_SIZE);
 
     var (cx, cy) = ClientBoardState.WorldToCell(new Vector2(wx, wy));
     cx = Mathf.Clamp(cx, minCX, maxCX);
     cy = Mathf.Clamp(cy, minCY, maxCY);
 
-    var (freeCX, freeCY) = FindNearestFreeCell(cx, cy, minCX, maxCX, minCY, maxCY);
+    var (freeCX, freeCY) = FindNearestFreeCell(cx, cy, minCX, maxCX, minCY, maxCY, rule);
     return ClientBoardState.CellCenter(freeCX, freeCY);
   }
 
-  // Search outward from (cx, cy) in Manhattan-distance rings until a free,
-  // in-bounds cell is found. Picks the Euclidean-closest within each ring.
-  private (int x, int y) FindNearestFreeCell(int cx, int cy, int minCX, int maxCX, int minCY, int maxCY)
+  // Search outward from (cx, cy) in Manhattan-distance rings until a free or valid cell is found.
+  // For Anywhere cards, allows placement on occupied cells. For other rules, avoids them.
+  private (int x, int y) FindNearestFreeCell(int cx, int cy, int minCX, int maxCX, int minCY, int maxCY, PlacementRule rule)
   {
-    if (!ClientBoardState.IsCellOccupied(cx, cy))
+    bool isAnywhere = rule == PlacementRule.Anywhere;
+
+    if (!ClientBoardState.IsCellOccupied(cx, cy) || isAnywhere)
       return (cx, cy);
 
     for (int r = 1; r <= 8; r++)
@@ -162,7 +175,7 @@ public class CardDragController : MonoBehaviour, IBeginDragHandler, IDragHandler
           if (Mathf.Abs(dx) + Mathf.Abs(dy) != r) continue;
           int nx = cx + dx, ny = cy + dy;
           if (nx < minCX || nx > maxCX || ny < minCY || ny > maxCY) continue;
-          if (ClientBoardState.IsCellOccupied(nx, ny)) continue;
+          if (!isAnywhere && ClientBoardState.IsCellOccupied(nx, ny)) continue;
           float d = dx * dx + dy * dy;
           if (d < bestDistSq) { bestDistSq = d; best = (nx, ny); }
         }

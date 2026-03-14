@@ -119,7 +119,7 @@ namespace ClashServer
         }
         else
         {
-          entity.Position += (toNext / dist) * entity.Stats.MovePerTick;
+          entity.Position += toNext / dist * entity.Stats.MovePerTick;
         }
         return;
       }
@@ -145,6 +145,11 @@ namespace ClashServer
         return;
       }
 
+      if (entity.Type == CardId.Giant && !entity.Target.IsBuilding)
+      {
+        return;
+      }
+
       pendingAttacks.Add((entity, entity.Target, entity.Stats.AttackDamage));
       entity.AttackCooldownTicks = entity.Stats.AttackCooldownTicks;
     }
@@ -152,7 +157,7 @@ namespace ClashServer
     private ServerEntity AcquireTarget(ServerEntity entity)
     {
       ServerEntity closest = null;
-      float closestDistSq = entity.Stats.AggroRange * entity.Stats.AggroRange;
+      float closestDistSq = float.MaxValue;
 
       // Sort by ID for deterministic iteration
       foreach (var other in entities.OrderBy(e => e.Id))
@@ -160,11 +165,15 @@ namespace ClashServer
         if (!other.IsAlive || other.Team == entity.Team)
           continue;
 
+        if (entity.Type == CardId.Giant && !other.IsBuilding)
+          continue;
+
+        float effectiveAggroRange = entity.Stats.AggroRange + other.FootprintRadius;
         float distSq = (other.Position - entity.Position).LengthSquared();
 
         // Use strict less-than for deterministic behavior
         // When distances are equal, lower ID wins (because we iterate by ID)
-        if (distSq < closestDistSq)
+        if (distSq < effectiveAggroRange * effectiveAggroRange && distSq < closestDistSq)
         {
           closest = other;
           closestDistSq = distSq;
@@ -176,8 +185,9 @@ namespace ClashServer
 
     private bool IsInRange(ServerEntity entity, ServerEntity target, float range)
     {
+      float effectiveRange = range + target.FootprintRadius;
       float distSq = (target.Position - entity.Position).LengthSquared();
-      return distSq <= range * range;
+      return distSq <= effectiveRange * effectiveRange;
     }
 
     public ServerEntity SpawnEntity(CardId type, Vector2 position, EntityTeam team, bool isBuilding = false)
@@ -187,6 +197,54 @@ namespace ClashServer
       logger.Log($"[Server] Spawned {type} (id={entity.Id}) at {position}");
       return entity;
     }
+
+    /// <summary>
+    /// Spawn one or more entities according to a formation pattern.
+    /// Returns all spawned entities (count matches the formation).
+    /// </summary>
+    public List<ServerEntity> SpawnCard(CardId type, Vector2 position, EntityTeam team,
+        SpawnFormation formation = SpawnFormation.Single, bool isBuilding = false)
+    {
+      var offsets = GetFormationOffsets(formation);
+      var spawned = new List<ServerEntity>(offsets.Length);
+      foreach (var offset in offsets)
+        spawned.Add(SpawnEntity(type, position + offset, team, isBuilding));
+      return spawned;
+    }
+
+    public void ApplySpellEffect(CardId spellCardId, Vector2 position, EntityTeam team)
+    {
+      // For simplicity, we hardcode the spell effects here.
+      // In a real implementation, you'd likely have a more data-driven approach.
+
+      switch (spellCardId)
+      {
+        case CardId.Fireball:
+          // Deal higher damage in a smaller radius
+          float fireballRadius = 2.5f;
+          float fireballDamage = 50f;
+          foreach (var entity in entities)
+          {
+            if (entity.IsAlive && (entity.Position - position).Length() <= fireballRadius + entity.FootprintRadius)
+            {
+              entity.TakeDamage(fireballDamage);
+              logger.Log($"[Server] FireballSpell hit Entity {entity.Id} for {fireballDamage} damage");
+            }
+          }
+          break;
+      }
+    }
+
+    private static Vector2[] GetFormationOffsets(SpawnFormation formation) => formation switch
+    {
+      SpawnFormation.Single => new[] { Vector2.Zero },
+      SpawnFormation.DuoLine => new[] { new Vector2(-0.5f, 0f), new Vector2(0.5f, 0f) },
+      SpawnFormation.TrioTriangle => new[] { new Vector2(0f, 0.5f), new Vector2(-0.5f, -0.5f), new Vector2(0.5f, -0.5f) },
+      SpawnFormation.QuadDiamond => new[] { new Vector2(0f, 0.7f), new Vector2(0.7f, 0f), new Vector2(0f, -0.7f), new Vector2(-0.7f, 0f) },
+      SpawnFormation.QuadLine => new[] { new Vector2(-1.5f, 0f), new Vector2(-0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(1.5f, 0f) },
+      SpawnFormation.Square => new[] { new Vector2(-0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, -0.5f), new Vector2(-0.5f, -0.5f) },
+      _ => new[] { Vector2.Zero }
+    };
 
     public List<ServerEntity> GetEntities() => entities;
 
