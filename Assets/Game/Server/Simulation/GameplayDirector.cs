@@ -20,6 +20,9 @@ namespace ClashServer
     private BoardManager boardManager;
 
     private const int PATH_RECALC_INTERVAL = 3; // ticks between path refreshes
+    private const int MOVEMENT_RESOLVE_ITERATIONS = 6;
+    private const float WAYPOINT_REACHED_EPSILON = 0.05f;
+    private const float OVERLAP_EPSILON = 0.001f;
 
     public GameplayDirector(ILogger logger = null)
     {
@@ -37,17 +40,22 @@ namespace ClashServer
       currentTick++;
       gameTime += ServerMatchController.FIXED_DT;
 
-      // Phase 1: Update movement for all entities (deterministic order)
-      foreach (var entity in entities.OrderBy(e => e.Id).ToList())
-      {
-        if (!entity.IsAlive) continue;
-        UpdateMovement(entity);
-      }
+      var liveEntities = entities
+        .Where(e => e.IsAlive)
+        .OrderBy(e => e.Id)
+        .ToList();
+
+      // Phase 1: Resolve troop movement from desired positions, then separate overlaps.
+      var desiredPositions = new Dictionary<int, Vector2>(liveEntities.Count);
+      foreach (var entity in liveEntities)
+        desiredPositions[entity.Id] = GetDesiredPosition(entity);
+
+      ResolveMovement(liveEntities, desiredPositions);
 
       // Phase 2: Calculate all attacks (without applying damage yet)
       List<(ServerEntity attacker, ServerEntity target, float damage)> pendingAttacks = new List<(ServerEntity, ServerEntity, float)>();
 
-      foreach (var entity in entities.OrderBy(e => e.Id).ToList())
+      foreach (var entity in liveEntities)
       {
         if (!entity.IsAlive) continue;
         CalculateAttack(entity, pendingAttacks);
@@ -66,10 +74,16 @@ namespace ClashServer
         }
       }
 
+      if (boardManager != null)
+      {
+        foreach (var buildingId in entities.Where(e => !e.IsAlive && e.IsBuilding).Select(e => e.Id).ToList())
+          boardManager.RemoveBuilding(buildingId);
+      }
+
       entities.RemoveAll(e => !e.IsAlive);
     }
 
-    private void UpdateMovement(ServerEntity entity)
+    private Vector2 GetDesiredPosition(ServerEntity entity)
     {
       // Acquire / refresh target
       var newTarget = (entity.Target == null || !entity.Target.IsAlive)
@@ -83,13 +97,14 @@ namespace ClashServer
         entity.Target = newTarget;
       }
 
-      if (entity.IsBuilding) return;
+      if (entity.IsBuilding || entity.Stats.MovePerTick <= 0f)
+        return entity.Position;
 
       // Stop moving once in attack range
       if (entity.Target != null && IsInRange(entity, entity.Target, entity.Stats.AttackRange))
       {
         entity.Path = null;
-        return;
+        return entity.Position;
       }
 
       // Choose movement goal
@@ -109,26 +124,212 @@ namespace ClashServer
       if (entity.Path != null && entity.Path.Count > 0)
       {
         Vector2 next = entity.Path[0];
-        Vector2 toNext = next - entity.Position;
-        float dist = toNext.Length();
-
-        if (dist <= entity.Stats.MovePerTick)
-        {
-          entity.Position = next;
-          entity.Path.RemoveAt(0);
-        }
-        else
-        {
-          entity.Position += toNext / dist * entity.Stats.MovePerTick;
-        }
-        return;
+        return MoveTowards(entity.Position, next, entity.Stats.MovePerTick);
       }
 
-      // Fallback: straight-line movement (no board manager or no path)
+      // Only use direct movement when pathfinding is unavailable.
+      if (boardManager != null)
+        return entity.Position;
+
       Vector2 dir = goal - entity.Position;
       float len = dir.Length();
       if (len > 0)
-        entity.Position += (dir / len) * entity.Stats.MovePerTick;
+        return entity.Position + (dir / len) * entity.Stats.MovePerTick;
+
+      return entity.Position;
+    }
+
+    private void ResolveMovement(List<ServerEntity> liveEntities, Dictionary<int, Vector2> desiredPositions)
+    {
+      var mobileEntities = liveEntities
+        .Where(e => !e.IsBuilding && e.CollisionRadius > 0f)
+        .ToList();
+
+      if (mobileEntities.Count == 0)
+        return;
+
+      var buildings = liveEntities
+        .Where(e => e.IsBuilding && e.CollisionRadius > 0f)
+        .ToList();
+
+      var resolvedPositions = new Dictionary<int, Vector2>(mobileEntities.Count);
+      foreach (var entity in mobileEntities)
+        resolvedPositions[entity.Id] = ClampToArena(desiredPositions[entity.Id], entity.CollisionRadius);
+
+      for (int iteration = 0; iteration < MOVEMENT_RESOLVE_ITERATIONS; iteration++)
+      {
+        bool movedAny = false;
+
+        foreach (var entity in mobileEntities)
+          movedAny |= ResolveStaticCollisions(entity, resolvedPositions, buildings);
+
+        for (int i = 0; i < mobileEntities.Count; i++)
+        {
+          for (int j = i + 1; j < mobileEntities.Count; j++)
+            movedAny |= ResolveUnitOverlap(
+              mobileEntities[i],
+              mobileEntities[j],
+              resolvedPositions,
+              desiredPositions);
+        }
+
+        if (!movedAny)
+          break;
+      }
+
+      foreach (var entity in mobileEntities)
+      {
+        entity.Position = KeepOnWalkableCell(
+          entity,
+          ClampToArena(resolvedPositions[entity.Id], entity.CollisionRadius));
+
+        AdvancePathProgress(entity);
+      }
+    }
+
+    private bool ResolveStaticCollisions(
+      ServerEntity entity,
+      Dictionary<int, Vector2> resolvedPositions,
+      IReadOnlyList<ServerEntity> buildings)
+    {
+      Vector2 original = resolvedPositions[entity.Id];
+      Vector2 adjusted = original;
+
+      foreach (var building in buildings)
+      {
+        float minDistance = entity.CollisionRadius + building.CollisionRadius;
+        Vector2 delta = adjusted - building.Position;
+        float distanceSq = delta.LengthSquared();
+
+        if (distanceSq >= minDistance * minDistance)
+          continue;
+
+        float distance = MathF.Sqrt(distanceSq);
+        Vector2 normal = distance > OVERLAP_EPSILON
+          ? delta / distance
+          : GetDeterministicSeparationDirection(entity.Id, building.Id);
+
+        adjusted = building.Position + normal * (minDistance + OVERLAP_EPSILON);
+      }
+
+      adjusted = KeepOnWalkableCell(entity, ClampToArena(adjusted, entity.CollisionRadius));
+      if ((adjusted - original).LengthSquared() <= OVERLAP_EPSILON * OVERLAP_EPSILON)
+        return false;
+
+      resolvedPositions[entity.Id] = adjusted;
+      return true;
+    }
+
+    private bool ResolveUnitOverlap(
+      ServerEntity a,
+      ServerEntity b,
+      Dictionary<int, Vector2> resolvedPositions,
+      Dictionary<int, Vector2> desiredPositions)
+    {
+      Vector2 aPos = resolvedPositions[a.Id];
+      Vector2 bPos = resolvedPositions[b.Id];
+      float minDistance = a.CollisionRadius + b.CollisionRadius;
+      Vector2 delta = bPos - aPos;
+      float distanceSq = delta.LengthSquared();
+
+      if (distanceSq >= minDistance * minDistance)
+        return false;
+
+      float distance = MathF.Sqrt(distanceSq);
+      Vector2 normal = distance > OVERLAP_EPSILON
+        ? delta / distance
+        : GetDeterministicSeparationDirection(a.Id, b.Id);
+
+      float overlap = minDistance - distance + OVERLAP_EPSILON;
+      float aDisplacementShare = GetDisplacementShare(a, desiredPositions[a.Id], b, desiredPositions[b.Id]);
+      float bDisplacementShare = 1f - aDisplacementShare;
+
+      aPos -= normal * overlap * aDisplacementShare;
+      bPos += normal * overlap * bDisplacementShare;
+
+      resolvedPositions[a.Id] = ClampToArena(aPos, a.CollisionRadius);
+      resolvedPositions[b.Id] = ClampToArena(bPos, b.CollisionRadius);
+      return true;
+    }
+
+    private float GetDisplacementShare(
+      ServerEntity entity,
+      Vector2 desiredPosition,
+      ServerEntity other,
+      Vector2 otherDesiredPosition)
+    {
+      float entityResistance = GetPushResistance(entity, desiredPosition);
+      float otherResistance = GetPushResistance(other, otherDesiredPosition);
+      float totalResistance = entityResistance + otherResistance;
+
+      if (totalResistance <= 0f)
+        return 0.5f;
+
+      return otherResistance / totalResistance;
+    }
+
+    private bool HasMovementIntent(ServerEntity entity, Vector2 desiredPosition)
+    {
+      return (desiredPosition - entity.Position).LengthSquared() > OVERLAP_EPSILON * OVERLAP_EPSILON;
+    }
+
+    private float GetPushResistance(ServerEntity entity, Vector2 desiredPosition)
+    {
+      float resistance = MathF.Max(entity.PushWeight, 0.1f);
+
+      if (!HasMovementIntent(entity, desiredPosition))
+        resistance *= 1.25f;
+
+      return resistance;
+    }
+
+    private void AdvancePathProgress(ServerEntity entity)
+    {
+      while (entity.Path != null &&
+             entity.Path.Count > 0 &&
+             (entity.Position - entity.Path[0]).LengthSquared() <= WAYPOINT_REACHED_EPSILON * WAYPOINT_REACHED_EPSILON)
+      {
+        entity.Path.RemoveAt(0);
+      }
+    }
+
+    private Vector2 KeepOnWalkableCell(ServerEntity entity, Vector2 position)
+    {
+      if (boardManager == null)
+        return position;
+
+      var (cx, cy) = NavGrid.WorldToCell(position);
+      if (NavGrid.IsWalkable(cx, cy, boardManager))
+        return position;
+
+      Vector2 fallback = ClampToArena(entity.Position, entity.CollisionRadius);
+      var (fx, fy) = NavGrid.WorldToCell(fallback);
+      return NavGrid.IsWalkable(fx, fy, boardManager) ? fallback : position;
+    }
+
+    private static Vector2 MoveTowards(Vector2 from, Vector2 to, float maxDistance)
+    {
+      Vector2 delta = to - from;
+      float distance = delta.Length();
+
+      if (distance <= maxDistance || distance <= OVERLAP_EPSILON)
+        return to;
+
+      return from + delta / distance * maxDistance;
+    }
+
+    private static Vector2 ClampToArena(Vector2 position, float radius)
+    {
+      return new Vector2(
+        Math.Clamp(position.X, NavGrid.WORLD_LEFT + radius, NavGrid.WORLD_RIGHT - radius),
+        Math.Clamp(position.Y, NavGrid.WORLD_BOTTOM + radius, NavGrid.WORLD_TOP - radius));
+    }
+
+    private static Vector2 GetDeterministicSeparationDirection(int firstId, int secondId)
+    {
+      uint hash = (uint)(firstId * 73856093 ^ secondId * 19349663);
+      float angle = (hash & 1023) / 1024f * MathF.PI * 2f;
+      return new Vector2(MathF.Cos(angle), MathF.Sin(angle));
     }
 
     private void CalculateAttack(ServerEntity entity, List<(ServerEntity attacker, ServerEntity target, float damage)> pendingAttacks)

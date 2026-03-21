@@ -33,8 +33,8 @@ namespace ClashServer
     // Troops can cross the river only within these X extents.
     private static readonly (float xMin, float xMax)[] BridgeXRanges =
     {
-      (-6f, -5f), // left bridge
-      ( 5f,  6f), // right bridge
+      (-6.5f, -4.5f), // left bridge
+      ( 4.5f,  6.5f), // right bridge
     };
 
     // ── Precomputed cell bounds ───────────────────────────────────────────

@@ -59,6 +59,8 @@ namespace ClashServer
     public int AttackCooldownTicks { get; set; }
     public bool IsBuilding { get; set; }
     public float FootprintRadius { get; }
+    public float CollisionRadius { get; }
+    public float PushWeight { get; }
 
     // Pathfinding state
     public List<Vector2> Path { get; set; }
@@ -75,6 +77,8 @@ namespace ClashServer
       AttackCooldownTicks = 0;
       Stats = GetStatsForType(type);
       FootprintRadius = GetFootprintRadius(type);
+      CollisionRadius = GetCollisionRadius(type);
+      PushWeight = GetPushWeight(type);
     }
 
     private static float GetFootprintRadius(CardId type) => type switch
@@ -83,6 +87,34 @@ namespace ClashServer
       CardId.KingTower => 2.0f,  // 4x4
       CardId.Cannon => 1.5f,  // 3x3
       _ => 0f,
+    };
+
+    private static float GetCollisionRadius(CardId type) => type switch
+    {
+      CardId.PrincessTower => 1.5f,
+      CardId.KingTower => 2.0f,
+      CardId.Cannon => 1.5f,
+      CardId.Giant => 0.7f,
+      CardId.Knight => 0.45f,
+      CardId.MiniPekka => 0.4f,
+      CardId.Musketeer => 0.4f,
+      CardId.Archer => 0.35f,
+      CardId.Goblin => 0.3f,
+      _ => 0f,
+    };
+
+    private static float GetPushWeight(CardId type) => type switch
+    {
+      CardId.PrincessTower => 100f,
+      CardId.KingTower => 120f,
+      CardId.Cannon => 100f,
+      CardId.Giant => 10f,
+      CardId.MiniPekka => 2.2f,
+      CardId.Knight => 1.8f,
+      CardId.Musketeer => 1.2f,
+      CardId.Archer => 0.9f,
+      CardId.Goblin => 0.6f,
+      _ => 1f,
     };
 
     private static EntityStats GetStatsForType(CardId type)

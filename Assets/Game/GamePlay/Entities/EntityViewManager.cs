@@ -31,17 +31,14 @@ public class EntityViewManager : MonoBehaviour
 
   private static Color GetBaseColor(EntityViewData data)
   {
-    if (data.isBuilding) return Color.yellow;
     return data.team == EntityTeam.Team1 ? Color.blue : Color.red;
   }
 
   private static void ApplyEntityColor(EntityViewData data)
   {
-    Renderer r = data.go?.GetComponent<Renderer>();
-    if (r == null) return;
-    float hp = data.currentHP / data.maxHP;
-    Color baseColor = GetBaseColor(data);
-    r.material.color = hp < 0.5f ? Color.Lerp(Color.black, baseColor, hp + 0.5f) : baseColor;
+    EntityView entityView = data.go.GetComponent<EntityView>();
+    if (entityView != null) entityView.SetColor(GetBaseColor(data));
+
   }
 
   public void SetSpellHighlight(Vector3 worldCenter, float spellRadius)

@@ -53,5 +53,10 @@ public class EntityView : MonoBehaviour
     }
   }
 
+  public void SetColor(Color color)
+  {
+    healthBar.GetComponent<Image>().color = color;
+  }
+
   public int GetEntityId() => entityId;
 }
