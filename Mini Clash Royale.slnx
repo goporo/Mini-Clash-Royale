@@ -1,5 +1,6 @@
 ﻿<Solution>
   <Project Path="Edgegap.csproj" />
+  <Project Path="Assembly-CSharp.csproj" />
   <Project Path="Mirror.csproj" />
   <Project Path="Mirror.Examples.csproj" />
   <Project Path="SimpleWebTransport.csproj" />
@@ -8,7 +9,6 @@
   <Project Path="kcp2k.csproj" />
   <Project Path="Unity.Mirror.CodeGen.csproj" />
   <Project Path="Mirror.Editor.csproj" />
-  <Project Path="Assembly-CSharp.csproj" />
   <Project Path="Mirror.Transports.csproj" />
   <Project Path="Assembly-CSharp-Editor.csproj" />
   <Project Path="Telepathy.csproj" />
