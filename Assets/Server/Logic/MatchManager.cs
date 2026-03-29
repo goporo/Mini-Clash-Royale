@@ -8,11 +8,10 @@ namespace ClashServer
 {
   public class MatchManager
   {
+    public event Action<CardId, Vector2, EntityTeam> SpellCastResolved;
+
     private bool matchOver = false;
     private EntityTeam? winner = null;
-    private int aiSpawnCooldownTicks = 0;
-    private int aiSpawnIntervalTicks = (int)(8f / ServerTickSettings.FixedDeltaTime); // 8 seconds at 0.1s per tick
-    private System.Random random;
     private readonly BoardManager boardManager = new();
 
     private ILogger logger;
@@ -49,17 +48,22 @@ namespace ClashServer
       Building
     }
 
+    private static RegionBounds GetArenaBounds() => new()
+    {
+      Left = -9f,
+      Right = 9f,
+      Bottom = -16f,
+      Top = 16f,
+      RiverBottom = -1f,
+      RiverTop = 1f
+    };
+
     public MatchManager(ILogger logger = null, int? randomSeed = null)
     {
       this.logger = logger ?? new ConsoleLogger();
       matchDurationTicks = (int)(MATCH_DURATION_SECONDS / ServerTickSettings.FixedDeltaTime);
 
-      // Use deterministic seeded random for AI
-      int seed = randomSeed ?? 12345;
-      random = new System.Random(seed);
-
       logger.Log($"[MatchManager] Match duration: {MATCH_DURATION_SECONDS}s ({matchDurationTicks} ticks)");
-      logger.Log($"[MatchManager] AI Random seed: {seed}");
     }
 
     /// <summary>
@@ -122,17 +126,8 @@ namespace ClashServer
     {
       EntityTeam team = cmd.PlayerId == 0 ? EntityTeam.Team1 : EntityTeam.Team2;
 
-      RegionBounds bounds = new()
-      {
-        Left = -9f,
-        Right = 9f,
-        Bottom = -16f,
-        Top = 16f,
-        RiverBottom = -1f,
-        RiverTop = 1f
-      };
-      CardType cardType = MapCardIdToCardType(cmd.CardId);
-      if (!ValidateSpawn(cardType, cmd.Position, team, bounds))
+      if (!TryGetCardType(cmd.CardId, out CardType cardType) ||
+          !ValidateSpawn(cardType, cmd.Position, team, GetArenaBounds()))
       {
         logger.Log($"[MatchManager] Invalid spawn position {cmd.Position} for PlayCard. Command ignored.");
         return;
@@ -144,12 +139,38 @@ namespace ClashServer
       if (cardType == CardType.Spell)
       {
         director.ApplySpellEffect(cmd.CardId, cmd.Position, team);
+        SpellCastResolved?.Invoke(cmd.CardId, cmd.Position, team);
         return;
       }
 
       var spawnedEntities = director.SpawnCard(cmd.CardId, cmd.Position, team, formation, isBuilding);
       if (isBuilding && spawnedEntities.Count > 0)
         boardManager.PlaceBuilding(spawnedEntities[0]);
+    }
+
+    public bool TryValidatePlayCard(CardId cardId, Vector2 position, EntityTeam team, out string failureReason)
+    {
+      failureReason = null;
+
+      if (matchOver)
+      {
+        failureReason = "Match already ended";
+        return false;
+      }
+
+      if (!TryGetCardType(cardId, out CardType cardType))
+      {
+        failureReason = "Unknown card";
+        return false;
+      }
+
+      if (!ValidateSpawn(cardType, position, team, GetArenaBounds()))
+      {
+        failureReason = "Invalid position";
+        return false;
+      }
+
+      return true;
     }
 
     private bool ValidateSpawn(CardType cardType, Vector2 pos, EntityTeam team, RegionBounds bounds)
@@ -210,14 +231,28 @@ namespace ClashServer
       logger.Log($"[MatchManager] Player {cmd.PlayerId} surrendered. Winner: {opposingTeam}");
     }
 
-    private CardType MapCardIdToCardType(CardId cardId)
+    private bool TryGetCardType(CardId cardId, out CardType cardType)
     {
-      return cardId switch
+      switch (cardId)
       {
-        CardId.Cannon => CardType.Building,
-        CardId.Fireball => CardType.Spell,
-        _ => CardType.Troop
-      };
+        case CardId.Knight:
+        case CardId.Archer:
+        case CardId.Giant:
+        case CardId.Goblin:
+        case CardId.Musketeer:
+        case CardId.MiniPekka:
+          cardType = CardType.Troop;
+          return true;
+        case CardId.Cannon:
+          cardType = CardType.Building;
+          return true;
+        case CardId.Fireball:
+          cardType = CardType.Spell;
+          return true;
+        default:
+          cardType = default;
+          return false;
+      }
     }
 
     private SpawnFormation MapCardIdToFormation(CardId cardId) => cardId switch
@@ -315,30 +350,10 @@ namespace ClashServer
       }
     }
 
-    public MatchCommand? UpdateAI(int currentTick)
-    {
-      if (matchOver)
-        return null;
-
-      aiSpawnCooldownTicks--;
-      if (aiSpawnCooldownTicks <= 0)
-      {
-        float randomX = (float)(random.NextDouble() * 4.0 - 2.0); // Range -2 to 2
-        Vector2 spawnPos = new Vector2(randomX, 15f);
-
-        aiSpawnCooldownTicks = aiSpawnIntervalTicks;
-
-        return MatchCommand.PlayCard(currentTick, 1, (CardId)random.Next((int)CardId.Knight, (int)CardId.Cannon + 1), spawnPos);
-      }
-
-      return null;
-    }
-
     public void Reset()
     {
       matchOver = false;
       winner = null;
-      aiSpawnCooldownTicks = 0;
       currentMatchTick = 0;
       commandQueue.Clear();
       boardManager.Clear();

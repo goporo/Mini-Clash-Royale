@@ -24,6 +24,7 @@ public class MyNetworkManager : NetworkManager, IClientGameTransport
 
     NetworkClient.RegisterHandler<FullSnapshotMessage>(OnFullSnapshotMessage);
     NetworkClient.RegisterHandler<DeltaSnapshotMessage>(OnDeltaSnapshotMessage);
+    NetworkClient.RegisterHandler<SpellCastMessage>(OnSpellCastMessage);
     NetworkClient.RegisterHandler<PlayCardFailedMessage>(OnPlayCardFailedMessage);
     NetworkClient.RegisterHandler<MatchEndedMessage>(OnMatchEndedMessage);
     NetworkClient.RegisterHandler<ElixirUpdateMessage>(OnElixirUpdateMessage);
@@ -48,10 +49,11 @@ public class MyNetworkManager : NetworkManager, IClientGameTransport
     base.OnStopClient();
   }
 
-  public void SendPlayCard(CardId cardId, Vector2Data position)
+  public void SendPlayCard(uint requestId, CardId cardId, Vector2Data position)
   {
     NetworkClient.Send(new PlayCardMessage
     {
+      RequestId = requestId,
       CardId = cardId,
       Position = position
     });
@@ -62,7 +64,7 @@ public class MyNetworkManager : NetworkManager, IClientGameTransport
     if (ServerMatchController.Instance != null)
     {
       System.Numerics.Vector2 position = msg.Position.ToVector2();
-      ServerMatchController.Instance.Server_PlayCard(conn, msg.CardId, position);
+      ServerMatchController.Instance.Server_PlayCard(conn, msg.RequestId, msg.CardId, position);
     }
   }
 
@@ -79,6 +81,11 @@ public class MyNetworkManager : NetworkManager, IClientGameTransport
   void OnDeltaSnapshotMessage(DeltaSnapshotMessage msg)
   {
     ClientNetworkBridge.PublishDeltaSnapshot(msg.Delta);
+  }
+
+  void OnSpellCastMessage(SpellCastMessage msg)
+  {
+    ClientNetworkBridge.PublishSpellCast(msg);
   }
 
   void OnPlayCardFailedMessage(PlayCardFailedMessage msg)

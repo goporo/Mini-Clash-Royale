@@ -51,6 +51,15 @@ namespace ClashServer
       }
     }
 
+    public void OnSpellCastReceived(SpellCastMessage msg)
+    {
+      if (EntityViewManager.Instance == null)
+        return;
+
+      Vector2 pos = msg.Position.ToUnityVector2();
+      EntityViewManager.Instance.PlaySpellCast(msg.CardId, new Vector3(pos.x, 0f, pos.y), msg.Team);
+    }
+
     public void OnPlayCardFailed(string reason)
     {
       Debug.Log($"[Client] Play card failed: {reason}");

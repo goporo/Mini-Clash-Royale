@@ -411,7 +411,7 @@ namespace ClashServer
       {
         case CardId.Fireball:
           float fireballRadius = 2.5f;
-          float fireballDamage = 50f;
+          float fireballDamage = 150f;
           foreach (var entity in entities)
           {
             if (entity.IsAlive && (entity.Position - position).Length() <= fireballRadius + entity.FootprintRadius && entity.Team != team)

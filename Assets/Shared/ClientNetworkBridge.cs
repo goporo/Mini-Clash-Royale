@@ -3,13 +3,14 @@ namespace ClashShared
   public interface IClientGameTransport
   {
     bool IsConnected { get; }
-    void SendPlayCard(CardId cardId, Vector2Data position);
+    void SendPlayCard(uint requestId, CardId cardId, Vector2Data position);
   }
 
   public interface IClientMatchEventSink
   {
     void OnFullSnapshotReceived(FullSnapshot snapshot);
     void OnDeltaSnapshotReceived(DeltaSnapshot delta);
+    void OnSpellCastReceived(SpellCastMessage msg);
     void OnPlayCardFailed(string reason);
     void OnMatchEnded(EntityTeam winner);
     void OnElixirUpdated(int milliElixir);
@@ -19,6 +20,8 @@ namespace ClashShared
 
   public static class ClientNetworkBridge
   {
+    private static uint nextPlayRequestId = 1;
+
     public static IClientGameTransport Transport { get; set; }
     public static IClientMatchEventSink EventSink { get; set; }
 
@@ -27,7 +30,7 @@ namespace ClashShared
       if (Transport == null || !Transport.IsConnected)
         return false;
 
-      Transport.SendPlayCard(cardId, position);
+      Transport.SendPlayCard(nextPlayRequestId++, cardId, position);
       return true;
     }
 
@@ -39,6 +42,11 @@ namespace ClashShared
     public static void PublishDeltaSnapshot(DeltaSnapshot delta)
     {
       EventSink?.OnDeltaSnapshotReceived(delta);
+    }
+
+    public static void PublishSpellCast(SpellCastMessage msg)
+    {
+      EventSink?.OnSpellCastReceived(msg);
     }
 
     public static void PublishPlayCardFailed(string reason)

@@ -18,6 +18,7 @@ namespace ClashShared
 
   public struct PlayCardMessage : NetworkMessage
   {
+    public uint RequestId;
     public CardId CardId;
     public Vector2Data Position;
   }
@@ -51,5 +52,12 @@ namespace ClashShared
     public CardId PlayedCardId;
     public CardId NewCardId;
     public CardId NextCardId;
+  }
+
+  public struct SpellCastMessage : NetworkMessage
+  {
+    public CardId CardId;
+    public Vector2Data Position;
+    public EntityTeam Team;
   }
 }

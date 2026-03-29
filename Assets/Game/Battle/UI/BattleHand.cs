@@ -17,6 +17,7 @@ public class BattleHand : MonoBehaviour
 
   private int _pendingSlotIndex = -1;
   private CardConfig _pendingSlotConfig;
+  private int _currentMilliElixir;
 
   private void Awake()
   {
@@ -31,6 +32,8 @@ public class BattleHand : MonoBehaviour
     handSlots[3].SetCard(GetConfig(card3));
     if (nextCardSlot != null)
       nextCardSlot.SetCard(GetConfig(nextCardId));
+
+    RefreshAffordability();
   }
 
   public void OnLocalCardPlayed(int slotIndex)
@@ -46,6 +49,7 @@ public class BattleHand : MonoBehaviour
       handSlots[_pendingSlotIndex].SetCard(_pendingSlotConfig);
     _pendingSlotIndex = -1;
     _pendingSlotConfig = null;
+    RefreshAffordability();
   }
 
   public void OnServerCardDrawn(CardId playedCardId, CardId newCardId, CardId nextCardId)
@@ -62,6 +66,14 @@ public class BattleHand : MonoBehaviour
       handSlots[slot].SetCard(GetConfig(newCardId));
     if (nextCardSlot != null)
       nextCardSlot.SetCard(GetConfig(nextCardId));
+
+    RefreshAffordability();
+  }
+
+  public void UpdateElixir(int milliElixir)
+  {
+    _currentMilliElixir = milliElixir;
+    RefreshAffordability();
   }
 
   private CardConfig GetConfig(CardId cardId)
@@ -77,5 +89,22 @@ public class BattleHand : MonoBehaviour
     for (int i = 0; i < handSlots.Length; i++)
       if (handSlots[i].Config != null && handSlots[i].Config.CardId == cardId) return i;
     return -1;
+  }
+
+  private void RefreshAffordability()
+  {
+    if (handSlots == null)
+      return;
+
+    for (int i = 0; i < handSlots.Length; i++)
+    {
+      if (handSlots[i] == null)
+        continue;
+
+      handSlots[i].RefreshState(_currentMilliElixir);
+    }
+
+    if (nextCardSlot != null)
+      nextCardSlot.RefreshState(_currentMilliElixir);
   }
 }

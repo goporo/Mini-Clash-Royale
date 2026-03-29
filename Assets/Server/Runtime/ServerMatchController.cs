@@ -17,6 +17,7 @@ namespace ClashServer
 
     private GameplayDirector gameplayDirector;
     private MatchManager matchManager;
+    private SimpleMatchAi aiController;
     private Dictionary<NetworkConnectionToClient, PlayerState> players;
 
     // Replay system
@@ -45,6 +46,8 @@ namespace ClashServer
       var logger = new UnityLogger();
       gameplayDirector = new GameplayDirector(logger);
       matchManager = new MatchManager(logger);
+      aiController = new SimpleMatchAi(logger);
+      matchManager.SpellCastResolved += HandleSpellCastResolved;
       gameplayDirector.SetBoardManager(matchManager.BoardManager);
       players = new Dictionary<NetworkConnectionToClient, PlayerState>();
       clientsNeedingFullSnapshot = new HashSet<NetworkConnectionToClient>();
@@ -145,11 +148,16 @@ namespace ClashServer
         playerState.ElixirState.TickRegen();
       }
 
+      if (IsAiActive())
+        aiController?.TickRegen();
+
       matchManager.ProcessCommandsForTick(currentTick, gameplayDirector);
 
       gameplayDirector.Update();
 
-      var aiCommand = matchManager.UpdateAI(currentTick + 1);
+      var aiCommand = IsAiActive()
+        ? aiController?.TryCreateCommand(currentTick + 1, gameplayDirector, matchManager)
+        : null;
       if (aiCommand.HasValue)
       {
         var cmd = aiCommand.Value;
@@ -205,16 +213,35 @@ namespace ClashServer
 
     public void Server_PlayCard(
         NetworkConnectionToClient sender,
+        uint requestId,
         CardId cardId,
         System.Numerics.Vector2 position)
     {
-      if (!players.ContainsKey(sender))
+      if (!players.TryGetValue(sender, out PlayerState playerState))
       {
         Debug.LogWarning($"[Server] Unknown player tried to play card");
         return;
       }
 
-      PlayerState playerState = players[sender];
+      if (matchManager == null || matchManager.IsMatchOver)
+      {
+        SendPlayCardFailed(sender, "Match already ended");
+        return;
+      }
+
+      if (playerState.Connection != sender)
+      {
+        Debug.LogWarning($"[Server] Sender does not own this player state");
+        SendPlayCardFailed(sender, "Invalid player ownership");
+        return;
+      }
+
+      if (!playerState.TryRegisterPlayRequest(requestId, out string requestFailureReason))
+      {
+        Debug.LogWarning($"[Server] Rejected play request {requestId}: {requestFailureReason}");
+        SendPlayCardFailed(sender, requestFailureReason);
+        return;
+      }
 
       // Anti-cheat: verify the card exists in the player's current hand
       if (!playerState.Deck.IsInHand(cardId))
@@ -232,10 +259,10 @@ namespace ClashServer
         return;
       }
 
-      if (!IsValidSpawnPosition(position, playerState.Team))
+      if (!matchManager.TryValidatePlayCard(cardId, position, playerState.Team, out string validationFailureReason))
       {
-        Debug.LogWarning($"[Server] Invalid spawn position {position}");
-        SendPlayCardFailed(sender, "Invalid position");
+        Debug.LogWarning($"[Server] Invalid play for request {requestId}: {validationFailureReason}");
+        SendPlayCardFailed(sender, validationFailureReason);
         return;
       }
 
@@ -245,6 +272,20 @@ namespace ClashServer
       int executionTick = currentTick + 1;
       var command = MatchCommand.PlayCard(executionTick, playerId, cardId, position);
 
+      if (!playerState.TrySpendElixir(cardId))
+      {
+        Debug.LogWarning($"[Server] Elixir spend failed for request {requestId}");
+        SendPlayCardFailed(sender, "Not enough elixir");
+        return;
+      }
+
+      if (!playerState.TryPlayCardFromHand(cardId, out CardId drawnCardId))
+      {
+        Debug.LogWarning($"[Server] Hand update failed for request {requestId}");
+        SendPlayCardFailed(sender, "Card not in hand");
+        return;
+      }
+
       if (enableReplay && replayRecorder != null && replayRecorder.IsRecording)
       {
         replayRecorder.RecordCommand(command);
@@ -252,8 +293,6 @@ namespace ClashServer
 
       matchManager.QueueCommand(command);
 
-      playerState.SpendElixir(cardId);
-      playerState.Deck.TryPlay(cardId, out CardId drawnCardId);
       sender.Send(new CardDrawnMessage
       {
         PlayedCardId = cardId,
@@ -262,11 +301,6 @@ namespace ClashServer
       });
 
       Debug.Log($"[Server] Player {playerId} queued PlayCard for tick {executionTick}: card={cardId} at {position}");
-    }
-
-    private bool IsValidSpawnPosition(System.Numerics.Vector2 position, EntityTeam team)
-    {
-      return true;
     }
 
     private void SyncStateToClients()
@@ -305,6 +339,16 @@ namespace ClashServer
       NetworkServer.SendToAll(new DeltaSnapshotMessage { Delta = delta });
     }
 
+    private void HandleSpellCastResolved(CardId cardId, System.Numerics.Vector2 position, EntityTeam team)
+    {
+      NetworkServer.SendToAll(new SpellCastMessage
+      {
+        CardId = cardId,
+        Position = Vector2Data.FromVector2(position),
+        Team = team
+      });
+    }
+
     private void SendPlayCardFailed(NetworkConnectionToClient conn, string reason)
     {
       conn.Send(new PlayCardFailedMessage { Reason = reason });
@@ -319,6 +363,10 @@ namespace ClashServer
     {
       NetworkServer.OnConnectedEvent -= HandlePlayerConnected;
       NetworkServer.OnDisconnectedEvent -= HandlePlayerDisconnected;
+
+      if (matchManager != null)
+        matchManager.SpellCastResolved -= HandleSpellCastResolved;
+
       base.OnStopServer();
     }
 
@@ -338,6 +386,13 @@ namespace ClashServer
       Debug.Log($"[Server] Player {conn.connectionId} disconnected");
       players.Remove(conn);
       clientsNeedingFullSnapshot.Remove(conn);
+    }
+
+    private bool IsAiActive()
+    {
+      bool hasTeam1Human = players.Values.Any(playerState => playerState.Team == EntityTeam.Team1);
+      bool hasTeam2Human = players.Values.Any(playerState => playerState.Team == EntityTeam.Team2);
+      return hasTeam1Human && !hasTeam2Human;
     }
   }
 }

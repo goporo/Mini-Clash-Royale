@@ -1,16 +1,16 @@
 using System.Collections.Generic;
-using UnityEngine;
 using ClashShared;
+using UnityEngine;
 
 // Pure client-side entity view manager
 public class EntityViewManager : MonoBehaviour
 {
   public static EntityViewManager Instance { get; private set; }
 
-
-  private class EntityViewData
+  private sealed class EntityViewData
   {
     public GameObject go;
+    public EntityView view;
     public Vector3 targetPosition;
     public float currentHP;
     public float maxHP;
@@ -18,54 +18,21 @@ public class EntityViewManager : MonoBehaviour
     public EntityTeam team;
     public bool isBuilding;
     public float footprintRadius;
+    public int targetId;
+    public float lastAttackVisualTime;
   }
 
-  private static float GetFootprintRadius(CardId type) => type switch
+  private readonly struct DamageCue
   {
-    CardId.PrincessTower => 1.5f,
-    CardId.KingTower => 2.0f,
-    CardId.Cannon => 1.5f,
-    _ => 0f,
-  };
+    public readonly int targetId;
 
-  private static Color GetBaseColor(EntityViewData data)
-  {
-    return data.team == EntityTeam.Team1 ? Color.blue : Color.red;
-  }
-
-  private static void ApplyEntityColor(EntityViewData data)
-  {
-    EntityView entityView = data.go.GetComponent<EntityView>();
-    if (entityView != null) entityView.SetColor(GetBaseColor(data));
-
-  }
-
-  public void SetSpellHighlight(Vector3 worldCenter, float spellRadius)
-  {
-    foreach (var kvp in entityViews)
+    public DamageCue(int targetId)
     {
-      EntityViewData data = kvp.Value;
-      Renderer r = data.go?.GetComponent<Renderer>();
-      if (r == null) continue;
-
-      float dist = Vector2.Distance(
-        new Vector2(worldCenter.x, worldCenter.z),
-        new Vector2(data.targetPosition.x, data.targetPosition.z));
-
-      if (dist <= spellRadius + data.footprintRadius)
-        r.material.color = Color.white;
-      else
-        ApplyEntityColor(data);
+      this.targetId = targetId;
     }
   }
 
-  public void ClearSpellHighlight()
-  {
-    foreach (var kvp in entityViews)
-      ApplyEntityColor(kvp.Value);
-  }
-
-  private Dictionary<int, EntityViewData> entityViews = new Dictionary<int, EntityViewData>();
+  private readonly Dictionary<int, EntityViewData> entityViews = new();
 
   [Header("Visual Prefabs")]
   public GameObject princessTowerPrefab;
@@ -79,17 +46,105 @@ public class EntityViewManager : MonoBehaviour
   public GameObject musketeerPrefab;
   public GameObject miniPekkaPrefab;
 
-
   [Header("Fallback Visual")]
   public GameObject cubePrefab;
 
-  void Awake()
+  private static float GetFootprintRadius(CardId type) => type switch
+  {
+    CardId.PrincessTower => 1.5f,
+    CardId.KingTower => 2.0f,
+    CardId.Cannon => 1.5f,
+    _ => 0f,
+  };
+
+  private static float GetAttackRange(CardId type) => type switch
+  {
+    CardId.PrincessTower => 8f,
+    CardId.KingTower => 8f,
+    CardId.Knight => 1.5f,
+    CardId.Archer => 5f,
+    CardId.Giant => 1.5f,
+    CardId.Cannon => 8f,
+    CardId.Goblin => 1f,
+    CardId.Musketeer => 4f,
+    CardId.MiniPekka => 1.5f,
+    _ => 0f,
+  };
+
+  private static float GetAttackCooldown(CardId type) => type switch
+  {
+    CardId.PrincessTower => 1f,
+    CardId.KingTower => 1.2f,
+    CardId.Knight => 1f,
+    CardId.Archer => 1f,
+    CardId.Giant => 1f,
+    CardId.Cannon => 1.5f,
+    CardId.Goblin => 0.8f,
+    CardId.Musketeer => 1f,
+    CardId.MiniPekka => 0.5f,
+    _ => 0.75f,
+  };
+
+  private static bool IsRanged(CardId type) => type switch
+  {
+    CardId.Archer => true,
+    CardId.Musketeer => true,
+    CardId.Cannon => true,
+    CardId.PrincessTower => true,
+    CardId.KingTower => true,
+    _ => false,
+  };
+
+  private static Color GetBaseColor(EntityViewData data)
+  {
+    return data.team == EntityTeam.Team1
+      ? new Color(0.55f, 0.78f, 1f)
+      : new Color(1f, 0.62f, 0.62f);
+  }
+
+  private static Color GetProjectileColor(EntityViewData attacker)
+  {
+    Color baseColor = attacker.team == EntityTeam.Team1
+      ? new Color(0.7f, 0.9f, 1f)
+      : new Color(1f, 0.78f, 0.55f);
+
+    if (attacker.type == CardId.Cannon)
+      return new Color(1f, 0.82f, 0.35f);
+
+    return baseColor;
+  }
+
+  private static Vector3 GetProjectileSpawnPosition(EntityViewData attacker)
+  {
+    if (attacker.go == null)
+      return attacker.targetPosition + Vector3.up * 0.75f;
+
+    float height = attacker.isBuilding ? 1.2f : 0.85f;
+    return attacker.go.transform.position + Vector3.up * height;
+  }
+
+  private static Vector3 GetProjectileTargetPosition(EntityViewData target)
+  {
+    if (target.go == null)
+      return target.targetPosition + Vector3.up * 0.6f;
+
+    return target.go.transform.position + Vector3.up * 0.55f;
+  }
+
+  private static void ApplyEntityColor(EntityViewData data)
+  {
+    if (data.view != null)
+      data.view.SetColor(GetBaseColor(data));
+  }
+
+  private void Awake()
   {
     if (Instance != null && Instance != this)
     {
       Destroy(gameObject);
       return;
     }
+
     Instance = this;
   }
 
@@ -99,109 +154,119 @@ public class EntityViewManager : MonoBehaviour
 
     ClearAllEntities();
 
-    foreach (var entityData in snapshot.Entities)
+    foreach (EntitySnapshot entityData in snapshot.Entities)
     {
-      if (!entityData.IsAlive) continue;
+      if (!entityData.IsAlive)
+        continue;
 
-      Vector2 pos = entityData.Position.ToUnityVector2();
-      Vector3 worldPos = new(pos.x, 0, pos.y);
-
-      GameObject prefab = GetPrefabForType(entityData.Type);
-      GameObject go = Instantiate(prefab, worldPos, Quaternion.identity);
-      go.name = $"Entity_{entityData.Id}_{entityData.Type}";
-
-      entityViews[entityData.Id] = new EntityViewData
-      {
-        go = go,
-        targetPosition = worldPos,
-        currentHP = entityData.CurrentHP,
-        maxHP = entityData.MaxHP,
-        type = entityData.Type,
-        team = entityData.Team,
-        isBuilding = entityData.IsBuilding,
-        footprintRadius = GetFootprintRadius(entityData.Type)
-      };
-
-      EntityView entityView = go.GetComponent<EntityView>();
-      if (entityView != null)
-      {
-        entityView.SetEntityId(entityData.Id);
-        entityView.SetTargetPosition(worldPos);
-      }
-
-      UpdateHealthBar(entityViews[entityData.Id]);
+      CreateEntity(entityData);
     }
+
+    RefreshCombatTargets();
   }
 
   public void ApplyDeltaSnapshot(DeltaSnapshot delta)
   {
-    // Spawn new entities
-    foreach (var entityData in delta.SpawnedEntities)
+    List<DamageCue> damageCues = new();
+
+    foreach (EntitySnapshot entityData in delta.SpawnedEntities)
     {
       if (entityViews.ContainsKey(entityData.Id))
         continue;
 
-      Vector2 pos = entityData.Position.ToUnityVector2();
-      Vector3 worldPos = new(pos.x, 0, pos.y);
-
-      GameObject prefab = GetPrefabForType(entityData.Type);
-      GameObject go = Instantiate(prefab, worldPos, Quaternion.identity);
-      go.name = $"Entity_{entityData.Id}_{entityData.Type}";
-
-      entityViews[entityData.Id] = new EntityViewData
-      {
-        go = go,
-        targetPosition = worldPos,
-        currentHP = entityData.CurrentHP,
-        maxHP = entityData.MaxHP,
-        type = entityData.Type,
-        team = entityData.Team,
-        isBuilding = entityData.IsBuilding,
-        footprintRadius = GetFootprintRadius(entityData.Type)
-      };
-
-      EntityView entityView = go.GetComponent<EntityView>();
-      if (entityView != null)
-      {
-        entityView.SetEntityId(entityData.Id);
-        entityView.SetTargetPosition(worldPos);
-      }
-
-      UpdateHealthBar(entityViews[entityData.Id]);
+      CreateEntity(entityData);
     }
 
-    foreach (var entityId in delta.DestroyedEntityIds)
+    foreach (EntitySnapshot entityData in delta.UpdatedEntities)
     {
+      if (!entityViews.TryGetValue(entityData.Id, out EntityViewData data))
+        continue;
+
+      Vector2 pos = entityData.Position.ToUnityVector2();
+      data.targetPosition = new Vector3(pos.x, 0f, pos.y);
+
+      if (data.currentHP - entityData.CurrentHP > 0.05f)
+        damageCues.Add(new DamageCue(entityData.Id));
+
+      data.currentHP = entityData.CurrentHP;
+      data.maxHP = entityData.MaxHP;
+      data.targetId = entityData.TargetId;
+
+      if (data.view != null)
+        data.view.SetTargetPosition(data.targetPosition);
+
+      UpdateHealthBar(data);
+    }
+
+    RefreshCombatTargets();
+
+    foreach (DamageCue damageCue in damageCues)
+      PlayDamageCue(damageCue.targetId);
+
+    foreach (int entityId in delta.DestroyedEntityIds)
+    {
+      PlayDamageCue(entityId);
       RemoveEntity(entityId);
     }
 
-    foreach (var entityData in delta.UpdatedEntities)
+    RefreshCombatTargets();
+  }
+
+  public void SetSpellHighlight(Vector3 worldCenter, float spellRadius)
+  {
+    foreach (KeyValuePair<int, EntityViewData> kvp in entityViews)
     {
-      if (!entityViews.ContainsKey(entityData.Id))
-        continue;
+      EntityViewData data = kvp.Value;
+      float dist = Vector2.Distance(
+        new Vector2(worldCenter.x, worldCenter.z),
+        new Vector2(data.targetPosition.x, data.targetPosition.z));
 
-      EntityViewData data = entityViews[entityData.Id];
-      UnityEngine.Vector2 pos = entityData.Position.ToUnityVector2();
-      data.targetPosition = new Vector3(pos.x, 0, pos.y);
-      data.currentHP = entityData.CurrentHP;
-
-      EntityView entityView = data.go.GetComponent<EntityView>();
-      if (entityView != null)
+      if (data.view != null)
       {
-        entityView.SetTargetPosition(data.targetPosition);
+        data.view.SetColor(dist <= spellRadius + data.footprintRadius
+          ? Color.white
+          : GetBaseColor(data));
       }
+    }
+  }
 
-      UpdateHealthBar(data);
+  public void ClearSpellHighlight()
+  {
+    foreach (KeyValuePair<int, EntityViewData> kvp in entityViews)
+      ApplyEntityColor(kvp.Value);
+  }
+
+  public void PlaySpellCast(CardId cardId, Vector3 worldPosition, EntityTeam team)
+  {
+    switch (cardId)
+    {
+      case CardId.Fireball:
+        CombatFx.PlayFireball(worldPosition, team);
+        break;
     }
   }
 
   public void RemoveEntity(int entityId)
   {
-    if (entityViews.ContainsKey(entityId))
+    if (!entityViews.TryGetValue(entityId, out EntityViewData data))
+      return;
+
+    entityViews.Remove(entityId);
+
+    if (data.go == null)
+      return;
+
+    if (data.view != null)
     {
-      Destroy(entityViews[entityId].go);
-      entityViews.Remove(entityId);
+      data.view.PlayDeath(() =>
+      {
+        if (data.go != null)
+          Destroy(data.go);
+      });
+      return;
     }
+
+    Destroy(data.go);
   }
 
   public GameObject GetPrefabForType(CardId type)
@@ -233,6 +298,52 @@ public class EntityViewManager : MonoBehaviour
     }
   }
 
+  public void ClearAllEntities()
+  {
+    foreach (KeyValuePair<int, EntityViewData> kvp in entityViews)
+    {
+      if (kvp.Value.go != null)
+        Destroy(kvp.Value.go);
+    }
+
+    entityViews.Clear();
+  }
+
+  private void CreateEntity(EntitySnapshot entityData)
+  {
+    Vector2 pos = entityData.Position.ToUnityVector2();
+    Vector3 worldPos = new(pos.x, 0f, pos.y);
+
+    GameObject prefab = GetPrefabForType(entityData.Type);
+    GameObject go = Instantiate(prefab, worldPos, Quaternion.identity);
+    go.name = $"Entity_{entityData.Id}_{entityData.Type}";
+
+    EntityView view = go.GetComponent<EntityView>();
+    if (view != null)
+    {
+      view.SetEntityId(entityData.Id);
+      view.SetTargetPosition(worldPos);
+    }
+
+    EntityViewData data = new()
+    {
+      go = go,
+      view = view,
+      targetPosition = worldPos,
+      currentHP = entityData.CurrentHP,
+      maxHP = entityData.MaxHP,
+      type = entityData.Type,
+      team = entityData.Team,
+      isBuilding = entityData.IsBuilding,
+      footprintRadius = GetFootprintRadius(entityData.Type),
+      targetId = entityData.TargetId,
+      lastAttackVisualTime = -999f
+    };
+
+    entityViews[entityData.Id] = data;
+    UpdateHealthBar(data);
+  }
+
   private GameObject GetDefaultCube()
   {
     if (cubePrefab != null)
@@ -243,26 +354,100 @@ public class EntityViewManager : MonoBehaviour
     return cube;
   }
 
-
   private void UpdateHealthBar(EntityViewData data)
   {
-    if (data.go != null)
-    {
-      EntityView entityView = data.go.GetComponent<EntityView>();
-      if (entityView != null)
-        entityView.SetHealth((int)data.currentHP, (int)data.maxHP);
+    if (data.view != null)
+      data.view.SetHealth((int)data.currentHP, (int)data.maxHP);
 
-      ApplyEntityColor(data);
+    ApplyEntityColor(data);
+  }
+
+  private void RefreshCombatTargets()
+  {
+    foreach (KeyValuePair<int, EntityViewData> kvp in entityViews)
+    {
+      EntityViewData attacker = kvp.Value;
+      if (attacker.view == null)
+        continue;
+
+      if (attacker.isBuilding)
+      {
+        attacker.view.ClearCombatTarget();
+      }
+      else if (attacker.targetId >= 0 && entityViews.TryGetValue(attacker.targetId, out EntityViewData target))
+        attacker.view.SetCombatTarget(target.targetPosition);
+      else
+        attacker.view.ClearCombatTarget();
     }
   }
 
-  public void ClearAllEntities()
+  private void PlayDamageCue(int targetId)
   {
-    foreach (var kvp in entityViews)
+    if (!entityViews.TryGetValue(targetId, out EntityViewData target))
+      return;
+
+    if (target.view != null)
+      target.view.PlayHitFlash();
+
+    if (!TryGetBestAttackCueAttacker(targetId, target, out EntityViewData attacker))
+      return;
+
+    bool ranged = IsRanged(attacker.type);
+    attacker.lastAttackVisualTime = Time.time;
+    attacker.view.PlayAttack(target.targetPosition, !ranged);
+
+    if (ranged)
     {
-      if (kvp.Value.go != null)
-        Destroy(kvp.Value.go);
+      CombatFx.PlayProjectile(
+        GetProjectileSpawnPosition(attacker),
+        GetProjectileTargetPosition(target),
+        GetProjectileColor(attacker),
+        attacker.type == CardId.Cannon ? 0.22f : 0.14f,
+        attacker.type == CardId.Cannon ? 0.3f : 0.18f);
     }
-    entityViews.Clear();
+  }
+
+  private bool IsAttackerInVisualRange(EntityViewData attacker, EntityViewData target)
+  {
+    float range = GetAttackRange(attacker.type) + target.footprintRadius + 0.75f;
+    Vector2 attackerPos = new(attacker.targetPosition.x, attacker.targetPosition.z);
+    Vector2 targetPos = new(target.targetPosition.x, target.targetPosition.z);
+    return (attackerPos - targetPos).sqrMagnitude <= range * range;
+  }
+
+  private bool TryGetBestAttackCueAttacker(int targetId, EntityViewData target, out EntityViewData bestAttacker)
+  {
+    bestAttacker = null;
+    float bestScore = float.MinValue;
+    float now = Time.time;
+
+    foreach (KeyValuePair<int, EntityViewData> kvp in entityViews)
+    {
+      EntityViewData attacker = kvp.Value;
+      if (attacker.targetId != targetId || attacker.team == target.team || attacker.view == null)
+        continue;
+
+      if (!IsAttackerInVisualRange(attacker, target))
+        continue;
+
+      float visualCooldown = GetAttackCooldown(attacker.type) * 0.6f;
+      float timeSinceLastAttackCue = now - attacker.lastAttackVisualTime;
+      if (timeSinceLastAttackCue < visualCooldown)
+        continue;
+
+      Vector2 attackerPos = new(attacker.targetPosition.x, attacker.targetPosition.z);
+      Vector2 targetPos = new(target.targetPosition.x, target.targetPosition.z);
+      float distanceScore = -(attackerPos - targetPos).sqrMagnitude;
+      float readinessScore = Mathf.Min(timeSinceLastAttackCue, visualCooldown * 2f);
+      float score = readinessScore * 10f + distanceScore;
+
+      if (score > bestScore)
+      {
+        bestScore = score;
+        bestAttacker = attacker;
+      }
+    }
+
+    return bestAttacker != null;
   }
 }

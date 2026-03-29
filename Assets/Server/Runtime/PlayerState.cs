@@ -9,6 +9,7 @@ namespace ClashServer
     public EntityTeam Team { get; set; }
     public ElixirState ElixirState { get; set; }
     public BattleDeck Deck { get; set; }
+    public uint LastSeenPlayRequestId { get; private set; }
 
     public PlayerState(NetworkConnectionToClient conn, EntityTeam team)
     {
@@ -20,32 +21,41 @@ namespace ClashServer
         CardId.Fireball, CardId.Archer, CardId.Goblin, CardId.Cannon,
         CardId.Knight, CardId.MiniPekka, CardId.Giant, CardId.Musketeer
       });
+      LastSeenPlayRequestId = 0;
     }
 
     public bool CanAffordCard(CardId cardId)
     {
-      return ElixirState.CanSpend(GetCardCostMilliElixir(cardId));
+      return ElixirState.CanSpend(CardCostTable.GetMilliElixirCost(cardId));
     }
 
-    public void SpendElixir(CardId cardId)
+    public bool TrySpendElixir(CardId cardId)
     {
-      ElixirState.TrySpend(GetCardCostMilliElixir(cardId));
+      return ElixirState.TrySpend(CardCostTable.GetMilliElixirCost(cardId));
     }
 
-    private int GetCardCostMilliElixir(CardId cardId)
+    public bool TryPlayCardFromHand(CardId cardId, out CardId drawnCardId)
     {
-      switch (cardId)
+      return Deck.TryPlay(cardId, out drawnCardId);
+    }
+
+    public bool TryRegisterPlayRequest(uint requestId, out string failureReason)
+    {
+      if (requestId == 0)
       {
-        case CardId.Knight: return 3000;
-        case CardId.Archer: return 3000;
-        case CardId.Giant: return 5000;
-        case CardId.Cannon: return 3000;
-        case CardId.Goblin: return 2000;
-        case CardId.Fireball: return 4000;
-        case CardId.Musketeer: return 4000;
-        case CardId.MiniPekka: return 4000;
-        default: return 3000;
+        failureReason = "Invalid play request";
+        return false;
       }
+
+      if (requestId <= LastSeenPlayRequestId)
+      {
+        failureReason = "Duplicate or stale play request";
+        return false;
+      }
+
+      LastSeenPlayRequestId = requestId;
+      failureReason = null;
+      return true;
     }
   }
 }

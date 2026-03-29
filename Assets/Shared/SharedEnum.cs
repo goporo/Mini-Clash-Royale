@@ -50,4 +50,23 @@ namespace ClashShared
     Team1 = 0,
     Team2 = 1
   }
+
+  public static class CardCostTable
+  {
+    public static int GetMilliElixirCost(CardId cardId)
+    {
+      switch (cardId)
+      {
+        case CardId.Knight: return 3000;
+        case CardId.Archer: return 3000;
+        case CardId.Giant: return 5000;
+        case CardId.Cannon: return 3000;
+        case CardId.Goblin: return 2000;
+        case CardId.Fireball: return 4000;
+        case CardId.Musketeer: return 4000;
+        case CardId.MiniPekka: return 4000;
+        default: return 3000;
+      }
+    }
+  }
 }
