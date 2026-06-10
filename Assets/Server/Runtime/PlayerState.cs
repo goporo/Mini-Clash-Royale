@@ -5,10 +5,10 @@ namespace ClashServer
 {
   public class PlayerState
   {
-    public NetworkConnectionToClient Connection { get; set; }
-    public EntityTeam Team { get; set; }
-    public ElixirState ElixirState { get; set; }
-    public BattleDeck Deck { get; set; }
+    public NetworkConnectionToClient Connection { get; }
+    public EntityTeam Team { get; }
+    public ElixirState ElixirState { get; }
+    public BattleDeck Deck { get; }
     public uint LastSeenPlayRequestId { get; private set; }
 
     public PlayerState(NetworkConnectionToClient conn, EntityTeam team)
@@ -18,8 +18,8 @@ namespace ClashServer
       ElixirState = new ElixirState();
       Deck = new BattleDeck(new[]
       {
-        CardId.Fireball, CardId.Archer, CardId.Goblin, CardId.Cannon,
-        CardId.Knight, CardId.MiniPekka, CardId.Giant, CardId.Musketeer
+        CardId.SkeletonBarrel, CardId.WallBreakers, CardId.Skeletons, CardId.SpearGoblins,
+        CardId.Minions, CardId.GoblinGang, CardId.Giant, CardId.Bomber
       });
       LastSeenPlayRequestId = 0;
     }

@@ -109,6 +109,51 @@ public class EntityView : MonoBehaviour
     hasCombatTarget = false;
   }
 
+  public void PlaySpinAttack(float splashRadius)
+  {
+    if (isDying)
+      return;
+
+    attackOffsetTween?.Kill();
+    attackScaleTween?.Kill();
+
+    attackOffsetTween = DOTween.To(
+        () => attackOffset,
+        v => attackOffset = v,
+        Vector3.up * 0.06f, 0.07f)
+      .SetEase(Ease.OutQuad)
+      .OnComplete(() =>
+      {
+        attackOffsetTween = DOTween.To(
+            () => attackOffset,
+            v => attackOffset = v,
+            Vector3.zero, 0.15f)
+          .SetEase(Ease.InQuad);
+      });
+
+    attackScaleTween = transform
+      .DOPunchScale(Vector3.one * 0.15f, 0.22f, 2, 0f)
+      .SetEase(Ease.OutQuad);
+
+    DebugDrawSplashRadius(splashRadius);
+  }
+
+  private void DebugDrawSplashRadius(float radius)
+  {
+    const int segments = 32;
+    const float duration = 0.4f;
+    Vector3 center = transform.position;
+
+    for (int i = 0; i < segments; i++)
+    {
+      float a0 = i / (float)segments * Mathf.PI * 2f;
+      float a1 = (i + 1) / (float)segments * Mathf.PI * 2f;
+      Vector3 p0 = center + new Vector3(Mathf.Cos(a0), 0.02f, Mathf.Sin(a0)) * radius;
+      Vector3 p1 = center + new Vector3(Mathf.Cos(a1), 0.02f, Mathf.Sin(a1)) * radius;
+      Debug.DrawLine(p0, p1, Color.yellow, duration);
+    }
+  }
+
   public void PlayAttack(Vector3 targetWorldPosition, bool isMelee)
   {
     if (isDying)

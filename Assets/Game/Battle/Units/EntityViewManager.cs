@@ -20,6 +20,7 @@ public class EntityViewManager : MonoBehaviour
     public float footprintRadius;
     public int targetId;
     public float lastAttackVisualTime;
+    public bool isSlowed;
   }
 
   private readonly struct DamageCue
@@ -34,69 +35,18 @@ public class EntityViewManager : MonoBehaviour
 
   private readonly Dictionary<int, EntityViewData> entityViews = new();
 
-  [Header("Visual Prefabs")]
-  public GameObject princessTowerPrefab;
-  public GameObject kingTowerPrefab;
-  public GameObject knightPrefab;
-  public GameObject archerPrefab;
-  public GameObject giantPrefab;
-  public GameObject cannonPrefab;
-  public GameObject goblinPrefab;
-  public GameObject fireballPrefab;
-  public GameObject musketeerPrefab;
-  public GameObject miniPekkaPrefab;
+  [Header("Card Library")]
+  public CardLibrary cardLibrary;
 
   [Header("Fallback Visual")]
   public GameObject cubePrefab;
 
-  private static float GetFootprintRadius(CardId type) => type switch
-  {
-    CardId.PrincessTower => 1.5f,
-    CardId.KingTower => 2.0f,
-    CardId.Cannon => 1.5f,
-    _ => 0f,
-  };
-
-  private static float GetAttackRange(CardId type) => type switch
-  {
-    CardId.PrincessTower => 8f,
-    CardId.KingTower => 8f,
-    CardId.Knight => 1.5f,
-    CardId.Archer => 5f,
-    CardId.Giant => 1.5f,
-    CardId.Cannon => 8f,
-    CardId.Goblin => 1f,
-    CardId.Musketeer => 4f,
-    CardId.MiniPekka => 1.5f,
-    _ => 0f,
-  };
-
-  private static float GetAttackCooldown(CardId type) => type switch
-  {
-    CardId.PrincessTower => 1f,
-    CardId.KingTower => 1.2f,
-    CardId.Knight => 1f,
-    CardId.Archer => 1f,
-    CardId.Giant => 1f,
-    CardId.Cannon => 1.5f,
-    CardId.Goblin => 0.8f,
-    CardId.Musketeer => 1f,
-    CardId.MiniPekka => 0.5f,
-    _ => 0.75f,
-  };
-
-  private static bool IsRanged(CardId type) => type switch
-  {
-    CardId.Archer => true,
-    CardId.Musketeer => true,
-    CardId.Cannon => true,
-    CardId.PrincessTower => true,
-    CardId.KingTower => true,
-    _ => false,
-  };
+  private static CardStats Stats(CardId type) => CardStatsTable.Get(type);
 
   private static Color GetBaseColor(EntityViewData data)
   {
+    if (data.isSlowed)
+      return Color.cyan;
     return data.team == EntityTeam.Team1
       ? new Color(0.55f, 0.78f, 1f)
       : new Color(1f, 0.62f, 0.62f);
@@ -192,10 +142,16 @@ public class EntityViewManager : MonoBehaviour
       data.maxHP = entityData.MaxHP;
       data.targetId = entityData.TargetId;
 
+      bool slowChanged = data.isSlowed != entityData.IsSlowed;
+      data.isSlowed = entityData.IsSlowed;
+
       if (data.view != null)
         data.view.SetTargetPosition(data.targetPosition);
 
       UpdateHealthBar(data);
+
+      if (slowChanged)
+        ApplyEntityColor(data);
     }
 
     RefreshCombatTargets();
@@ -253,6 +209,10 @@ public class EntityViewManager : MonoBehaviour
 
     entityViews.Remove(entityId);
 
+    float novaRadius = Stats(data.type).DeathNovaRadius;
+    if (novaRadius > 0f)
+      DrawDebugNovaCircle(data.targetPosition, novaRadius);
+
     if (data.go == null)
       return;
 
@@ -271,31 +231,8 @@ public class EntityViewManager : MonoBehaviour
 
   public GameObject GetPrefabForType(CardId type)
   {
-    switch (type)
-    {
-      case CardId.Knight:
-        return knightPrefab;
-      case CardId.Archer:
-        return archerPrefab;
-      case CardId.Giant:
-        return giantPrefab;
-      case CardId.Cannon:
-        return cannonPrefab;
-      case CardId.PrincessTower:
-        return princessTowerPrefab;
-      case CardId.KingTower:
-        return kingTowerPrefab;
-      case CardId.Goblin:
-        return goblinPrefab;
-      case CardId.Fireball:
-        return fireballPrefab;
-      case CardId.Musketeer:
-        return musketeerPrefab;
-      case CardId.MiniPekka:
-        return miniPekkaPrefab;
-      default:
-        return GetDefaultCube();
-    }
+    GameObject prefab = cardLibrary?.Get(type)?.EntityPrefab;
+    return prefab != null ? prefab : GetDefaultCube();
   }
 
   public void ClearAllEntities()
@@ -335,9 +272,10 @@ public class EntityViewManager : MonoBehaviour
       type = entityData.Type,
       team = entityData.Team,
       isBuilding = entityData.IsBuilding,
-      footprintRadius = GetFootprintRadius(entityData.Type),
+      footprintRadius = Stats(entityData.Type).FootprintRadius,
       targetId = entityData.TargetId,
-      lastAttackVisualTime = -999f
+      lastAttackVisualTime = -999f,
+      isSlowed = entityData.IsSlowed
     };
 
     entityViews[entityData.Id] = data;
@@ -392,27 +330,48 @@ public class EntityViewManager : MonoBehaviour
     if (!TryGetBestAttackCueAttacker(targetId, target, out EntityViewData attacker))
       return;
 
-    bool ranged = IsRanged(attacker.type);
+    CardStats attackerStats = Stats(attacker.type);
     attacker.lastAttackVisualTime = Time.time;
-    attacker.view.PlayAttack(target.targetPosition, !ranged);
 
-    if (ranged)
+    bool isMelee = attackerStats.AttackRange <= 1.5f;
+    if (attackerStats.DamagePattern == DamagePattern.RadiusAroundSelf)
+      attacker.view.PlaySpinAttack(attackerStats.SplashRadius);
+    else
+      attacker.view.PlayAttack(target.targetPosition, isMelee);
+
+    if (!isMelee)
     {
+      bool largeProjectile = attackerStats.AttackRange > 5f;
       CombatFx.PlayProjectile(
         GetProjectileSpawnPosition(attacker),
         GetProjectileTargetPosition(target),
         GetProjectileColor(attacker),
-        attacker.type == CardId.Cannon ? 0.22f : 0.14f,
-        attacker.type == CardId.Cannon ? 0.3f : 0.18f);
+        largeProjectile ? 0.22f : 0.14f,
+        largeProjectile ? 0.30f : 0.18f);
     }
   }
 
   private bool IsAttackerInVisualRange(EntityViewData attacker, EntityViewData target)
   {
-    float range = GetAttackRange(attacker.type) + target.footprintRadius + 0.75f;
+    float range = Stats(attacker.type).AttackRange + target.footprintRadius + 0.75f;
     Vector2 attackerPos = new(attacker.targetPosition.x, attacker.targetPosition.z);
     Vector2 targetPos = new(target.targetPosition.x, target.targetPosition.z);
     return (attackerPos - targetPos).sqrMagnitude <= range * range;
+  }
+
+  private static void DrawDebugNovaCircle(Vector3 center, float radius)
+  {
+    const int segments = 24;
+    const float duration = 0.8f;
+    float step = 2f * UnityEngine.Mathf.PI / segments;
+    for (int i = 0; i < segments; i++)
+    {
+      float a0 = i * step;
+      float a1 = (i + 1) * step;
+      Vector3 p0 = center + new Vector3(UnityEngine.Mathf.Cos(a0) * radius, 0.02f, UnityEngine.Mathf.Sin(a0) * radius);
+      Vector3 p1 = center + new Vector3(UnityEngine.Mathf.Cos(a1) * radius, 0.02f, UnityEngine.Mathf.Sin(a1) * radius);
+      Debug.DrawLine(p0, p1, Color.white, duration);
+    }
   }
 
   private bool TryGetBestAttackCueAttacker(int targetId, EntityViewData target, out EntityViewData bestAttacker)
@@ -430,7 +389,7 @@ public class EntityViewManager : MonoBehaviour
       if (!IsAttackerInVisualRange(attacker, target))
         continue;
 
-      float visualCooldown = GetAttackCooldown(attacker.type) * 0.6f;
+      float visualCooldown = Stats(attacker.type).AttackCooldown * 0.6f;
       float timeSinceLastAttackCue = now - attacker.lastAttackVisualTime;
       if (timeSinceLastAttackCue < visualCooldown)
         continue;

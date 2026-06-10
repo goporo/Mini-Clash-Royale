@@ -6,8 +6,8 @@ public class BattleHand : MonoBehaviour
 {
   public static BattleHand Instance { get; private set; }
 
-  [Header("Card Library (all possible CardConfig assets)")]
-  public CardConfig[] cardLibrary;
+  [Header("Card Library")]
+  public CardLibrary cardLibrary;
 
   [Header("Hand Slots (4)")]
   public CardSlotUI[] handSlots = new CardSlotUI[4];
@@ -76,13 +76,7 @@ public class BattleHand : MonoBehaviour
     RefreshAffordability();
   }
 
-  private CardConfig GetConfig(CardId cardId)
-  {
-    if (cardLibrary == null) return null;
-    foreach (var c in cardLibrary)
-      if (c != null && c.CardId == cardId) return c;
-    return null;
-  }
+  private CardConfig GetConfig(CardId cardId) => cardLibrary?.Get(cardId);
 
   private int FindSlotWithCard(CardId cardId)
   {

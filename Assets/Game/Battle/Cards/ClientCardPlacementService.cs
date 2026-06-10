@@ -5,29 +5,9 @@ public static class ClientCardPlacementService
 {
   private const float GRID_SIZE = ClientBoardState.GRID_SIZE;
 
-  private struct RegionBounds
-  {
-    public float Left;
-    public float Right;
-    public float Bottom;
-    public float Top;
-    public float RiverBottom;
-    public float RiverTop;
-  }
-
-  private static readonly RegionBounds bounds = new()
-  {
-    Left = -9f,
-    Right = 9f,
-    Bottom = -16f,
-    Top = 16f,
-    RiverBottom = -1f,
-    RiverTop = 1f
-  };
-
   public static bool TryGetPlacement(Vector3 worldPosition, PlacementRule rule, out Vector2 snappedPosition)
   {
-    if (worldPosition == Vector3.zero || worldPosition.z < bounds.Bottom)
+    if (worldPosition == Vector3.zero || worldPosition.z < BattleArena.Bottom)
     {
       snappedPosition = default;
       return false;
@@ -37,20 +17,20 @@ public static class ClientCardPlacementService
     return true;
   }
 
-  public static float BottomWorldY => bounds.Bottom;
+  public static float BottomWorldY => BattleArena.Bottom;
 
   private static Vector2 ValidateAndSnapPosition(Vector2 pos, PlacementRule rule)
   {
-    float minY = bounds.Bottom;
-    float maxY = bounds.RiverBottom;
+    float minY = BattleArena.Bottom;
+    float maxY = BattleArena.RiverBottom;
     if (rule == PlacementRule.Anywhere)
-      maxY = bounds.Top;
+      maxY = BattleArena.Top;
 
-    float wx = Mathf.Clamp(pos.x, bounds.Left, bounds.Right);
+    float wx = Mathf.Clamp(pos.x, BattleArena.Left, BattleArena.Right);
     float wy = Mathf.Clamp(pos.y, minY, maxY);
 
-    int minCX = Mathf.FloorToInt((bounds.Left + GRID_SIZE * 0.5f) / GRID_SIZE);
-    int maxCX = Mathf.FloorToInt((bounds.Right - GRID_SIZE * 0.5f) / GRID_SIZE);
+    int minCX = Mathf.FloorToInt((BattleArena.Left + GRID_SIZE * 0.5f) / GRID_SIZE);
+    int maxCX = Mathf.FloorToInt((BattleArena.Right - GRID_SIZE * 0.5f) / GRID_SIZE);
     int minCY = Mathf.FloorToInt((minY + GRID_SIZE * 0.5f) / GRID_SIZE);
     int maxCY = Mathf.FloorToInt((maxY - GRID_SIZE * 0.5f) / GRID_SIZE);
 

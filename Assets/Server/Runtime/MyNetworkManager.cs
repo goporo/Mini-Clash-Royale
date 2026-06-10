@@ -1,9 +1,10 @@
 using Mirror;
 using UnityEngine;
+using ClashBattle;
 using ClashServer;
 using ClashShared;
 
-public class MyNetworkManager : NetworkManager, IClientGameTransport
+public class MyNetworkManager : NetworkManager, IClientBattleTransport
 {
   public bool IsConnected => NetworkClient.isConnected;
 
@@ -20,7 +21,7 @@ public class MyNetworkManager : NetworkManager, IClientGameTransport
   public override void OnStartClient()
   {
     base.OnStartClient();
-    ClientNetworkBridge.Transport = this;
+    ClientBattleGateway.Transport = this;
 
     NetworkClient.RegisterHandler<FullSnapshotMessage>(OnFullSnapshotMessage);
     NetworkClient.RegisterHandler<DeltaSnapshotMessage>(OnDeltaSnapshotMessage);
@@ -43,8 +44,8 @@ public class MyNetworkManager : NetworkManager, IClientGameTransport
 
   public override void OnStopClient()
   {
-    if (ReferenceEquals(ClientNetworkBridge.Transport, this))
-      ClientNetworkBridge.Transport = null;
+    if (ReferenceEquals(ClientBattleGateway.Transport, this))
+      ClientBattleGateway.Transport = null;
 
     base.OnStopClient();
   }
@@ -75,42 +76,42 @@ public class MyNetworkManager : NetworkManager, IClientGameTransport
 
   void OnFullSnapshotMessage(FullSnapshotMessage msg)
   {
-    ClientNetworkBridge.PublishFullSnapshot(msg.Snapshot);
+    ClientBattleGateway.PublishFullSnapshot(msg.Snapshot);
   }
 
   void OnDeltaSnapshotMessage(DeltaSnapshotMessage msg)
   {
-    ClientNetworkBridge.PublishDeltaSnapshot(msg.Delta);
+    ClientBattleGateway.PublishDeltaSnapshot(msg.Delta);
   }
 
   void OnSpellCastMessage(SpellCastMessage msg)
   {
-    ClientNetworkBridge.PublishSpellCast(msg);
+    ClientBattleGateway.PublishSpellCast(msg);
   }
 
   void OnPlayCardFailedMessage(PlayCardFailedMessage msg)
   {
-    ClientNetworkBridge.PublishPlayCardFailed(msg.Reason);
+    ClientBattleGateway.PublishPlayCardFailed(msg.Reason);
   }
 
   void OnMatchEndedMessage(MatchEndedMessage msg)
   {
-    ClientNetworkBridge.PublishMatchEnded(msg.Winner);
+    ClientBattleGateway.PublishMatchEnded(msg.Winner);
   }
 
   void OnElixirUpdateMessage(ElixirUpdateMessage msg)
   {
-    ClientNetworkBridge.PublishElixirUpdated(msg.MilliElixir);
+    ClientBattleGateway.PublishElixirUpdated(msg.MilliElixir);
   }
 
   void OnHandStateMessage(HandStateMessage msg)
   {
-    ClientNetworkBridge.PublishHandState(msg);
+    ClientBattleGateway.PublishHandState(msg);
   }
 
   void OnCardDrawnMessage(CardDrawnMessage msg)
   {
-    ClientNetworkBridge.PublishCardDrawn(msg);
+    ClientBattleGateway.PublishCardDrawn(msg);
   }
 
   public override void OnServerConnect(NetworkConnectionToClient conn)

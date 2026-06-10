@@ -105,11 +105,11 @@ namespace ClashServer
         return false;
 
       Lane lane = GetLane(threat.Position.X);
-      bool isHeavyThreat = threat.Type == CardId.Giant || threat.Type == CardId.MiniPekka || threat.IsBuilding;
+      bool isHeavyThreat = threat.Type == CardId.Giant || threat.Type == CardId.MiniPekka || threat.Type == CardId.Valkyrie || threat.IsBuilding;
 
       CardId[] priorities = isHeavyThreat
-        ? new[] { CardId.Cannon, CardId.MiniPekka, CardId.Knight, CardId.Musketeer, CardId.Archer, CardId.Goblin }
-        : new[] { CardId.Knight, CardId.Archer, CardId.Goblin, CardId.Musketeer, CardId.Cannon, CardId.MiniPekka };
+        ? new[] { CardId.Cannon, CardId.MiniPekka, CardId.Valkyrie, CardId.Musketeer, CardId.Archer, CardId.Goblin }
+        : new[] { CardId.Valkyrie, CardId.Archer, CardId.Goblin, CardId.Musketeer, CardId.Cannon, CardId.MiniPekka };
 
       foreach (CardId cardId in priorities)
       {
@@ -139,7 +139,7 @@ namespace ClashServer
       if (giant == null)
         return false;
 
-      CardId[] supportOrder = { CardId.Musketeer, CardId.Archer, CardId.Knight, CardId.Goblin, CardId.MiniPekka };
+      CardId[] supportOrder = { CardId.Musketeer, CardId.Archer, CardId.Valkyrie, CardId.Goblin, CardId.MiniPekka };
       foreach (CardId cardId in supportOrder)
       {
         if (!state.Deck.IsInHand(cardId) || !state.CanAfford(cardId))
@@ -190,7 +190,7 @@ namespace ClashServer
       List<CardId> pressureOrder = new()
       {
         CardId.MiniPekka,
-        CardId.Knight,
+        CardId.Valkyrie,
         CardId.Musketeer,
         CardId.Archer,
         CardId.Goblin
@@ -255,7 +255,7 @@ namespace ClashServer
 
         score += enemy.IsBuilding ? 1.35f : 1f;
 
-        if (enemy.Type == CardId.Musketeer || enemy.Type == CardId.MiniPekka || enemy.Type == CardId.Giant)
+        if (enemy.Type == CardId.Musketeer || enemy.Type == CardId.MiniPekka || enemy.Type == CardId.Giant || enemy.Type == CardId.Valkyrie)
           score += 0.8f;
 
         if (enemy.Position.Y > 1f)
@@ -271,7 +271,7 @@ namespace ClashServer
         return 0f;
 
       float score = enemy.Position.Y * 0.8f;
-      score += enemy.Stats.AttackDamage * 0.08f;
+      score += enemy.Definition.Attack.Damage * 0.08f;
       score += enemy.Stats.CurrentHP * 0.02f;
 
       if (enemy.Type == CardId.Giant)
@@ -279,6 +279,9 @@ namespace ClashServer
 
       if (enemy.Type == CardId.MiniPekka)
         score += 3f;
+
+      if (enemy.Type == CardId.Valkyrie)
+        score += 2.2f;
 
       if (enemy.IsBuilding)
         score += 2f;

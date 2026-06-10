@@ -40,6 +40,7 @@ namespace ClashShared
     public int TargetId; // -1 means no target
     public bool IsAlive;
     public bool IsBuilding;
+    public bool IsSlowed;
 
     public EntitySnapshot(
       int id,
@@ -50,7 +51,8 @@ namespace ClashShared
       float maxHP,
       int targetId,
       bool isAlive,
-      bool isBuilding)
+      bool isBuilding,
+      bool isSlowed = false)
     {
       Id = id;
       Position = position;
@@ -61,6 +63,7 @@ namespace ClashShared
       TargetId = targetId;
       IsAlive = isAlive;
       IsBuilding = isBuilding;
+      IsSlowed = isSlowed;
     }
   }
 

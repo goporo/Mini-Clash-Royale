@@ -1,4 +1,5 @@
 using UnityEngine;
+using ClashBattle;
 using ClashShared;
 
 public static class ClientCardPlayService
@@ -8,7 +9,7 @@ public static class ClientCardPlayService
     if (card == null)
       return false;
 
-    if (!ClientNetworkBridge.TrySendPlayCard(card.CardId, Vector2DataUnityConversions.FromUnityVector2(position)))
+    if (!ClientBattleGateway.TrySendPlayCard(card.CardId, Vector2DataUnityConversions.FromUnityVector2(position)))
     {
       Debug.LogError("Client transport is not connected.");
       return false;

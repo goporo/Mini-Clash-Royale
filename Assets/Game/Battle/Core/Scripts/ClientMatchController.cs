@@ -1,10 +1,13 @@
 using Mirror;
 using UnityEngine;
+using UnityEngine.Scripting.APIUpdating;
+using ClashBattle;
 using ClashShared;
 
-namespace ClashServer
+namespace ClashBattle
 {
-  public class ClientMatchController : MonoBehaviour, IClientMatchEventSink
+  [MovedFrom("ClashServer")]
+  public class ClientMatchController : MonoBehaviour, IClientBattleEventSink
   {
     public static ClientMatchController Instance;
 
@@ -18,7 +21,7 @@ namespace ClashServer
         return;
       }
       Instance = this;
-      ClientNetworkBridge.EventSink = this;
+      ClientBattleGateway.EventSink = this;
       Debug.Log("[Client] ClientMatchController initialized");
     }
 
@@ -91,7 +94,7 @@ namespace ClashServer
 
     public void PlayCard(CardId cardId, Vector2 position)
     {
-      if (!ClientNetworkBridge.TrySendPlayCard(cardId, Vector2DataUnityConversions.FromUnityVector2(position)))
+      if (!ClientBattleGateway.TrySendPlayCard(cardId, Vector2DataUnityConversions.FromUnityVector2(position)))
       {
         Debug.LogWarning("[Client] Cannot play card - not connected");
         return;
@@ -104,8 +107,8 @@ namespace ClashServer
     {
       if (Instance == this)
       {
-        if (ReferenceEquals(ClientNetworkBridge.EventSink, this))
-          ClientNetworkBridge.EventSink = null;
+        if (ReferenceEquals(ClientBattleGateway.EventSink, this))
+          ClientBattleGateway.EventSink = null;
 
         Instance = null;
       }

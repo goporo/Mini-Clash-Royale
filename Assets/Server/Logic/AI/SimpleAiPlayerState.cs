@@ -16,7 +16,7 @@ namespace ClashServer
       {
         CardId.Giant,
         CardId.Musketeer,
-        CardId.Knight,
+        CardId.Valkyrie,
         CardId.Archer,
         CardId.Goblin,
         CardId.Cannon,

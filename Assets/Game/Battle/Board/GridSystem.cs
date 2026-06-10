@@ -11,7 +11,7 @@ public class GridSystem
 
   public Vector3 CellToWorld(Vector2Int cell)
   {
-    return new Vector3(cell.x * cellSize, 0f, cell.y * cellSize);
+    return new Vector3((cell.x + 0.5f) * cellSize, 0f, (cell.y + 0.5f) * cellSize);
   }
 
   public Vector2Int WorldToCell(Vector3 pos)

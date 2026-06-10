@@ -12,13 +12,6 @@ public static class ClientBoardState
 {
   public const float GRID_SIZE = 1f;
 
-  private static readonly Dictionary<CardId, (float w, float h)> buildingSizes = new()
-    {
-      { CardId.PrincessTower, (3f, 3f) },
-      { CardId.KingTower, (4f, 4f) },
-      { CardId.Block, (1f, 1f) },
-    };
-
   private static readonly HashSet<(int x, int y)> occupiedCells = new();
 
   private static readonly Dictionary<int, (Vector2 pos, CardId type)> buildingById = new();
@@ -51,8 +44,7 @@ public static class ClientBoardState
       occupiedCells.Contains((cx, cy));
 
   public static (int x, int y) WorldToCell(Vector2 worldPos) =>
-      ((int)Math.Floor(worldPos.x / GRID_SIZE),
-       (int)Math.Floor(worldPos.y / GRID_SIZE));
+      (CellCoord(worldPos.x), CellCoord(worldPos.y));
 
   public static Vector2 CellCenter(int cx, int cy) =>
       new((cx + 0.5f) * GRID_SIZE, (cy + 0.5f) * GRID_SIZE);
@@ -65,14 +57,9 @@ public static class ClientBoardState
       occupiedCells.Add(cell);
   }
 
-  /// <summary>
-  /// All cells whose area [C*G, (C+1)*G) overlaps the building footprint.
-  /// Uses the same formula as BoardManager.GetFootprintCells.
-  /// </summary>
   private static IEnumerable<(int x, int y)> GetFootprintCells(Vector2 center, CardId type)
   {
-    var (w, h) = buildingSizes.TryGetValue(type, out var s) ? s : (1f, 1f);
-
+    var (w, h) = BattleArena.GetBuildingSize(type);
     int x0 = Mathf.CeilToInt((center.x - w * 0.5f) / GRID_SIZE);
     int x1 = Mathf.CeilToInt((center.x + w * 0.5f) / GRID_SIZE) - 1;
     int y0 = Mathf.CeilToInt((center.y - h * 0.5f) / GRID_SIZE);
@@ -81,5 +68,10 @@ public static class ClientBoardState
     for (int cx = x0; cx <= x1; cx++)
       for (int cy = y0; cy <= y1; cy++)
         yield return (cx, cy);
+  }
+
+  private static int CellCoord(float worldValue)
+  {
+    return (int)Math.Floor(worldValue / GRID_SIZE);
   }
 }

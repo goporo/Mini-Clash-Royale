@@ -44,11 +44,11 @@ namespace ClashServer
       NetworkServer.OnDisconnectedEvent += HandlePlayerDisconnected;
 
       var logger = new UnityLogger();
-      gameplayDirector = new GameplayDirector(logger);
-      matchManager = new MatchManager(logger);
+      var boardManager = new BoardManager();
+      gameplayDirector = new GameplayDirector(boardManager, logger);
+      matchManager = new MatchManager(boardManager, logger);
       aiController = new SimpleMatchAi(logger);
       matchManager.SpellCastResolved += HandleSpellCastResolved;
-      gameplayDirector.SetBoardManager(matchManager.BoardManager);
       players = new Dictionary<NetworkConnectionToClient, PlayerState>();
       clientsNeedingFullSnapshot = new HashSet<NetworkConnectionToClient>();
 
@@ -100,18 +100,7 @@ namespace ClashServer
 
     private void InitializeMatch()
     {
-      var board = matchManager.BoardManager;
-
-      // Team 1 (bottom)
-      board.PlaceBuilding(gameplayDirector.SpawnEntity(CardId.KingTower, new System.Numerics.Vector2(0f, -13f), EntityTeam.Team1, true));
-      board.PlaceBuilding(gameplayDirector.SpawnEntity(CardId.PrincessTower, new System.Numerics.Vector2(-5.5f, -10.5f), EntityTeam.Team1, true));
-      board.PlaceBuilding(gameplayDirector.SpawnEntity(CardId.PrincessTower, new System.Numerics.Vector2(5.5f, -10.5f), EntityTeam.Team1, true));
-
-      // Team 2 (top)
-      board.PlaceBuilding(gameplayDirector.SpawnEntity(CardId.KingTower, new System.Numerics.Vector2(0f, 13f), EntityTeam.Team2, true));
-      board.PlaceBuilding(gameplayDirector.SpawnEntity(CardId.PrincessTower, new System.Numerics.Vector2(-5.5f, 10.5f), EntityTeam.Team2, true));
-      board.PlaceBuilding(gameplayDirector.SpawnEntity(CardId.PrincessTower, new System.Numerics.Vector2(5.5f, 10.5f), EntityTeam.Team2, true));
-
+      MatchSetup.InitializeStandardArena(gameplayDirector, matchManager.BoardManager);
       gameplayDirector.ResetSnapshotTracking();
 
       Debug.Log("[Server] Match initialized with king towers and arena towers");
