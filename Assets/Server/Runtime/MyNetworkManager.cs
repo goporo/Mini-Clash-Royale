@@ -8,6 +8,36 @@ public class MyNetworkManager : NetworkManager, IClientBattleTransport
 {
   public bool IsConnected => NetworkClient.isConnected;
 
+  [HideInInspector] public MatchMode MatchMode = MatchMode.PvE;
+
+  public override void Awake()
+  {
+    System.Console.WriteLine("[Server] Awake() called");
+    base.Awake();
+#if UNITY_SERVER
+    System.Console.WriteLine("[Server] UNITY_SERVER defined — configuring headless mode");
+    MatchMode = MatchMode.PvP;
+    headlessStartMode = HeadlessStartOptions.AutoStartServer;
+
+    string[] args = System.Environment.GetCommandLineArgs();
+    for (int i = 0; i < args.Length - 1; i++)
+    {
+      if (args[i] == "-port" && ushort.TryParse(args[i + 1], out ushort port))
+      {
+        if (Transport.active is PortTransport pt)
+          pt.Port = port;
+        Debug.Log($"[Server] Port set to {port} from command line");
+      }
+    }
+
+    Debug.Log("[Server] ========================================");
+    Debug.Log("[Server] Dedicated Server Build starting...");
+    ushort activePort = Transport.active is PortTransport p ? p.Port : (ushort)7777;
+    Debug.Log($"[Server] Port: {activePort}");
+    Debug.Log("[Server] ========================================");
+#endif
+  }
+
   public override void OnStartServer()
   {
     base.OnStartServer();
@@ -15,7 +45,15 @@ public class MyNetworkManager : NetworkManager, IClientBattleTransport
     NetworkServer.RegisterHandler<PlayCardMessage>(OnPlayCardMessage);
     NetworkServer.RegisterHandler<ClientReadyMessage>(OnClientReadyMessage);
 
-    Debug.Log("[Server] Message handlers registered");
+    var transport = Transport.active;
+    string address = networkAddress;
+    ushort port = (transport is PortTransport pt) ? pt.Port : (ushort)0;
+
+    Debug.Log("[Server] ========================================");
+    Debug.Log($"[Server] Server ONLINE — listening on port {port}");
+    Debug.Log($"[Server] Match mode: {MatchMode}");
+    Debug.Log("[Server] Waiting for players...");
+    Debug.Log("[Server] ========================================");
   }
 
   public override void OnStartClient()
@@ -116,14 +154,21 @@ public class MyNetworkManager : NetworkManager, IClientBattleTransport
 
   public override void OnServerConnect(NetworkConnectionToClient conn)
   {
-    Debug.Log($"[Server] Player {conn.connectionId} connected");
+    int playerCount = NetworkServer.connections.Count;
+    Debug.Log($"[Server] >> Player connected | connId={conn.connectionId} | address={conn.address} | total={playerCount}");
     base.OnServerConnect(conn);
   }
 
   public override void OnServerDisconnect(NetworkConnectionToClient conn)
   {
-    Debug.Log($"[Server] Player {conn.connectionId} disconnected");
+    int playerCount = NetworkServer.connections.Count - 1;
+    Debug.Log($"[Server] << Player disconnected | connId={conn.connectionId} | remaining={playerCount}");
     base.OnServerDisconnect(conn);
+  }
+
+  public override void OnServerAddPlayer(NetworkConnectionToClient conn)
+  {
+    // Do not spawn a player prefab — server tracks players via ServerMatchController
   }
 
   public override void OnClientConnect()

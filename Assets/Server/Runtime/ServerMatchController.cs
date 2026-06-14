@@ -10,7 +10,6 @@ namespace ClashServer
   /// Server-only match controller - handles game logic and state
   /// Uses Mirror directly for networking
   /// </summary>
-  [RequireComponent(typeof(NetworkIdentity))]
   public class ServerMatchController : NetworkBehaviour
   {
     public static ServerMatchController Instance;
@@ -19,6 +18,7 @@ namespace ClashServer
     private MatchManager matchManager;
     private SimpleMatchAi aiController;
     private Dictionary<NetworkConnectionToClient, PlayerState> players;
+    private MatchMode matchMode = MatchMode.PvE;
 
     // Replay system
     private ReplayRecorder replayRecorder;
@@ -35,13 +35,34 @@ namespace ClashServer
 
     private HashSet<NetworkConnectionToClient> clientsNeedingFullSnapshot = new HashSet<NetworkConnectionToClient>();
 
+    public void SetMatchMode(MatchMode mode)
+    {
+      matchMode = mode;
+    }
+
     public override void OnStartServer()
     {
       Debug.Log("[Server] ServerMatchController started");
       Instance = this;
 
+      if (NetworkManager.singleton is MyNetworkManager nm)
+        matchMode = nm.MatchMode;
+
+      Debug.Log($"[Server] Match mode: {matchMode}");
+
       NetworkServer.OnConnectedEvent += HandlePlayerConnected;
       NetworkServer.OnDisconnectedEvent += HandlePlayerDisconnected;
+
+      players = new Dictionary<NetworkConnectionToClient, PlayerState>();
+      clientsNeedingFullSnapshot = new HashSet<NetworkConnectionToClient>();
+
+      ResetMatch();
+    }
+
+    private void ResetMatch()
+    {
+      if (matchManager != null)
+        matchManager.SpellCastResolved -= HandleSpellCastResolved;
 
       var logger = new UnityLogger();
       var boardManager = new BoardManager();
@@ -49,30 +70,31 @@ namespace ClashServer
       matchManager = new MatchManager(boardManager, logger);
       aiController = new SimpleMatchAi(logger);
       matchManager.SpellCastResolved += HandleSpellCastResolved;
-      players = new Dictionary<NetworkConnectionToClient, PlayerState>();
-      clientsNeedingFullSnapshot = new HashSet<NetworkConnectionToClient>();
+
+      currentTick = 0;
+      tickTimer = 0;
+      snapshotTimer = 0;
+      timeAccumulator = 0;
+      clientsNeedingFullSnapshot.Clear();
 
       if (enableReplay)
       {
         replayRecorder = new ReplayRecorder();
 
         if (!System.IO.Directory.Exists(replayFolderPath))
-        {
           System.IO.Directory.CreateDirectory(replayFolderPath);
-        }
 
-        var metadata = new MatchMetadata("Player1", "AI");
+        var metadata = new MatchMetadata("Player1", matchMode == MatchMode.PvP ? "Player2" : "AI");
         replayRecorder.StartRecording(metadata);
-        Debug.Log("[Server] Replay recording started");
       }
 
       if (enableDriftDetection)
       {
         driftDetector = new DriftDetector(hashInterval: 10, logger: logger);
-        Debug.Log("[Server] Drift detection enabled (every 10 ticks)");
       }
 
       InitializeMatch();
+      Debug.Log("[Server] Match reset — waiting for players");
     }
 
     public void HandleClientReady(NetworkConnectionToClient conn)
@@ -93,7 +115,8 @@ namespace ClashServer
           Card1 = deck.Hand[1],
           Card2 = deck.Hand[2],
           Card3 = deck.Hand[3],
-          NextCardId = deck.NextCardId
+          NextCardId = deck.NextCardId,
+          LocalTeam = playerState.Team
         });
       }
     }
@@ -109,7 +132,10 @@ namespace ClashServer
     [ServerCallback]
     private void Update()
     {
-      if (matchManager != null && matchManager.IsMatchOver)
+      if (players == null || gameplayDirector == null || matchManager == null)
+        return;
+
+      if (matchManager.IsMatchOver)
         return;
 
       tickTimer += Time.deltaTime;
@@ -172,11 +198,17 @@ namespace ClashServer
       }
     }
 
+    private bool matchEndHandled = false;
+
     private void HandleMatchEnd()
     {
+      if (matchEndHandled) return;
+      matchEndHandled = true;
+
       if (matchManager.Winner.HasValue)
       {
         BroadcastMatchEnded(matchManager.Winner.Value);
+        Debug.Log($"[Server] *** Match ended — Winner: {matchManager.Winner.Value} at tick {currentTick} ***");
       }
 
       if (enableReplay && replayRecorder != null && replayRecorder.IsRecording)
@@ -184,9 +216,7 @@ namespace ClashServer
         if (enableDriftDetection && driftDetector != null)
         {
           foreach (var (tick, hash) in driftDetector.Hashes)
-          {
             replayRecorder.RecordStateHash(tick, hash);
-          }
         }
 
         replayRecorder.StopRecording(matchManager.Winner, currentTick);
@@ -198,6 +228,24 @@ namespace ClashServer
         replayRecorder.SaveToFile(fullPath);
         Debug.Log($"[Server] Replay saved to: {fullPath}");
       }
+
+      Debug.Log("[Server] Resetting in 5 seconds...");
+      Invoke(nameof(RestartMatch), 5f);
+    }
+
+    private void RestartMatch()
+    {
+      Debug.Log("[Server] Disconnecting players and resetting match...");
+
+      foreach (var conn in players.Keys.ToList())
+        conn.Disconnect();
+
+      players.Clear();
+      clientsNeedingFullSnapshot.Clear();
+      matchEndHandled = false;
+
+      ResetMatch();
+      Debug.Log("[Server] Ready — waiting for next 2 players on port 7777");
     }
 
     public void Server_PlayCard(
@@ -345,6 +393,7 @@ namespace ClashServer
 
     private void BroadcastMatchEnded(EntityTeam winner)
     {
+      Debug.Log($"[Server] *** Match ended — Winner: {winner} at tick {currentTick} ***");
       NetworkServer.SendToAll(new MatchEndedMessage { Winner = winner });
     }
 
@@ -361,24 +410,38 @@ namespace ClashServer
 
     private void HandlePlayerConnected(NetworkConnectionToClient conn)
     {
-      Debug.Log($"[Server] Player {conn.connectionId} connected");
+      if (players.Count >= 2)
+      {
+        Debug.LogWarning($"[Server] Rejected connection {conn.connectionId} — match already full (2/2)");
+        conn.Disconnect();
+        return;
+      }
 
       EntityTeam team = players.Count == 0 ? EntityTeam.Team1 : EntityTeam.Team2;
       PlayerState playerState = new PlayerState(conn, team);
       players[conn] = playerState;
 
-      Debug.Log($"[Server] Player assigned to {team}, waiting for ready message");
+      Debug.Log($"[Server] Player {conn.connectionId} joined as {team} | players={players.Count}/2");
+
+      if (players.Count == 2)
+        Debug.Log("[Server] >> Both players connected — match starting!");
+      else
+        Debug.Log("[Server] >> Waiting for 2nd player...");
     }
 
     private void HandlePlayerDisconnected(NetworkConnectionToClient conn)
     {
-      Debug.Log($"[Server] Player {conn.connectionId} disconnected");
+      if (players.TryGetValue(conn, out var state))
+        Debug.Log($"[Server] Player {conn.connectionId} ({state.Team}) left | players remaining={players.Count - 1}");
+
       players.Remove(conn);
       clientsNeedingFullSnapshot.Remove(conn);
     }
 
     private bool IsAiActive()
     {
+      if (matchMode == MatchMode.PvP) return false;
+
       bool hasTeam1Human = players.Values.Any(playerState => playerState.Team == EntityTeam.Team1);
       bool hasTeam2Human = players.Values.Any(playerState => playerState.Team == EntityTeam.Team2);
       return hasTeam1Human && !hasTeam2Human;

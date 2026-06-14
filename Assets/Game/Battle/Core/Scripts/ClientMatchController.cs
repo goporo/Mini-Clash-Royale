@@ -22,6 +22,13 @@ namespace ClashBattle
       }
       Instance = this;
       ClientBattleGateway.EventSink = this;
+
+      GameObject board = GameObject.Find("Board");
+      if (board != null)
+        LocalPlayerContext.Init(board.transform);
+      else
+        Debug.LogWarning("[Client] Board object not found — LocalPlayerContext offset will be zero");
+
       Debug.Log("[Client] ClientMatchController initialized");
     }
 
@@ -60,7 +67,8 @@ namespace ClashBattle
         return;
 
       Vector2 pos = msg.Position.ToUnityVector2();
-      EntityViewManager.Instance.PlaySpellCast(msg.CardId, new Vector3(pos.x, 0f, pos.y), msg.Team);
+      Vector3 visualPos = LocalPlayerContext.ToVisual(new Vector3(pos.x, 0f, pos.y));
+      EntityViewManager.Instance.PlaySpellCast(msg.CardId, visualPos, msg.Team);
     }
 
     public void OnPlayCardFailed(string reason)
@@ -82,6 +90,8 @@ namespace ClashBattle
 
     public void OnHandStateReceived(HandStateMessage msg)
     {
+      LocalPlayerContext.SetTeam(msg.LocalTeam);
+      BattleCameraSetup.Apply();
       if (BattleHand.Instance != null)
         BattleHand.Instance.InitHand(msg.Card0, msg.Card1, msg.Card2, msg.Card3, msg.NextCardId);
     }

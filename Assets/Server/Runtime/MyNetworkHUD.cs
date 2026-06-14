@@ -2,6 +2,7 @@ using Mirror;
 using UnityEngine;
 using System;
 using System.Collections.Generic;
+using ClashShared;
 
 /// <summary>
 /// Advanced Network HUD for Mini Clash Royale
@@ -43,8 +44,12 @@ public class MyNetworkHUD : MonoBehaviour
   private GUIStyle sectionHeaderStyle;
   private GUIStyle scrollViewStyle;
 
+  private bool stylesInitialized = false;
   private Vector2 playerScrollPosition;
   private Vector2 consoleScrollPosition;
+  private MatchMode selectedMode = MatchMode.PvE;
+  private GUIStyle modeButtonActiveStyle;
+  private GUIStyle modeButtonInactiveStyle;
 
   private float serverStartTime;
   private bool isRestarting = false;
@@ -58,6 +63,8 @@ public class MyNetworkHUD : MonoBehaviour
   void Awake()
   {
     manager = GetComponent<NetworkManager>();
+    if (manager == null)
+      manager = FindFirstObjectByType<NetworkManager>();
     Application.logMessageReceived += HandleLog;
   }
 
@@ -71,7 +78,7 @@ public class MyNetworkHUD : MonoBehaviour
     if (type == LogType.Error || type == LogType.Warning || logString.Contains("Mirror"))
     {
       string timestamp = DateTime.Now.ToString("HH:mm:ss");
-      string prefix = type == LogType.Error ? "❌" : type == LogType.Warning ? "⚠️" : "ℹ️";
+      string prefix = type == LogType.Error ? "[ERR]" : type == LogType.Warning ? "[WRN]" : "[INF]";
       serverLogs.Add($"[{timestamp}] {prefix} {logString}");
 
       if (serverLogs.Count > maxLogs)
@@ -150,6 +157,14 @@ public class MyNetworkHUD : MonoBehaviour
     // Scroll view style
     scrollViewStyle = new GUIStyle();
     scrollViewStyle.normal.background = MakeTex(2, 2, new Color(0.1f, 0.1f, 0.15f, 0.8f));
+
+    modeButtonActiveStyle = new GUIStyle(buttonStyle);
+    modeButtonActiveStyle.normal.background = MakeTex(2, 2, successButtonColor);
+    modeButtonActiveStyle.hover.background = MakeTex(2, 2, new Color(0.3f, 0.9f, 0.5f, 1f));
+
+    modeButtonInactiveStyle = new GUIStyle(buttonStyle);
+    modeButtonInactiveStyle.normal.background = MakeTex(2, 2, new Color(0.25f, 0.25f, 0.3f, 1f));
+    modeButtonInactiveStyle.hover.background = MakeTex(2, 2, new Color(0.35f, 0.35f, 0.4f, 1f));
   }
 
   Texture2D MakeTex(int width, int height, Color col)
@@ -167,8 +182,13 @@ public class MyNetworkHUD : MonoBehaviour
   void OnGUI()
   {
     if (!showGUI) return;
+    if (manager == null) return;
 
-    InitializeStyles();
+    if (!stylesInitialized)
+    {
+      InitializeStyles();
+      stylesInitialized = true;
+    }
 
     if (isCollapsed)
     {
@@ -177,7 +197,7 @@ public class MyNetworkHUD : MonoBehaviour
       int collapsedHeight = 100;
       GUILayout.BeginArea(new Rect(offsetX, offsetY, collapsedWidth, collapsedHeight), boxStyle);
 
-      if (GUILayout.Button("▶", buttonStyle, GUILayout.Height(80)))
+      if (GUILayout.Button(">", buttonStyle, GUILayout.Height(80)))
       {
         isCollapsed = false;
       }
@@ -194,8 +214,8 @@ public class MyNetworkHUD : MonoBehaviour
 
       // Title with collapse button
       GUILayout.BeginHorizontal();
-      GUILayout.Label("⚔️ Mini Clash Royale", titleStyle);
-      if (GUILayout.Button("◀", buttonStyle, GUILayout.Width(40), GUILayout.Height(30)))
+      GUILayout.Label("Mini Clash Royale", titleStyle);
+      if (GUILayout.Button("<", buttonStyle, GUILayout.Width(40), GUILayout.Height(30)))
       {
         isCollapsed = true;
       }
@@ -206,7 +226,7 @@ public class MyNetworkHUD : MonoBehaviour
       // Show status message if any
       if (!string.IsNullOrEmpty(statusMessage) && Time.time - statusMessageTime < 3f)
       {
-        GUILayout.Label($"📢 {statusMessage}", boldLabelStyle);
+        GUILayout.Label(statusMessage, boldLabelStyle);
         GUILayout.Space(5);
       }
 
@@ -241,7 +261,7 @@ public class MyNetworkHUD : MonoBehaviour
   {
     // Quick Status
     GUILayout.BeginVertical(panelStyle);
-    GUILayout.Label("📡 CONNECTION STATUS", sectionHeaderStyle);
+    GUILayout.Label("CONNECTION STATUS", sectionHeaderStyle);
     GUILayout.Label("Not Connected", labelStyle);
     GUILayout.Label($"Transport: <color=#FFA500>{Transport.active.GetType().Name}</color>", labelStyle);
     GUILayout.EndVertical();
@@ -249,13 +269,28 @@ public class MyNetworkHUD : MonoBehaviour
     GUILayout.Space(8);
 
     // Connection Options
-    GUILayout.Label("🎮 SELECT MODE", sectionHeaderStyle);
+    GUILayout.Label("SELECT MODE", sectionHeaderStyle);
 
     if (!NetworkClient.active)
     {
 #if !UNITY_WEBGL
+      // Mode selector
+      GUILayout.BeginVertical(panelStyle);
+      GUILayout.Label("GAME MODE", sectionHeaderStyle);
+      GUILayout.BeginHorizontal();
+      if (GUILayout.Button("PvE", selectedMode == MatchMode.PvE ? modeButtonActiveStyle : modeButtonInactiveStyle, GUILayout.Height(38)))
+        selectedMode = MatchMode.PvE;
+      if (GUILayout.Button("PvP", selectedMode == MatchMode.PvP ? modeButtonActiveStyle : modeButtonInactiveStyle, GUILayout.Height(38)))
+        selectedMode = MatchMode.PvP;
+      GUILayout.EndHorizontal();
+      string modeDesc = selectedMode == MatchMode.PvE ? "Solo vs AI bot" : "Wait for another player";
+      GUILayout.Label($"<color=#AAAAAA>{modeDesc}</color>", labelStyle);
+      GUILayout.EndVertical();
+
+      GUILayout.Space(5);
+
       // Host Game Button
-      if (GUILayout.Button("🏠 HOST GAME", successButtonStyle, GUILayout.Height(45)))
+      if (GUILayout.Button("HOST GAME", successButtonStyle, GUILayout.Height(45)))
       {
         StartServer(true);
         isCollapsed = true;
@@ -265,7 +300,7 @@ public class MyNetworkHUD : MonoBehaviour
 
       // Join Game Section
       GUILayout.BeginVertical(panelStyle);
-      GUILayout.Label("🔌 JOIN SERVER", sectionHeaderStyle);
+      GUILayout.Label("JOIN SERVER", sectionHeaderStyle);
 
       GUILayout.BeginHorizontal();
       GUILayout.Label("Address:", labelStyle, GUILayout.Width(70));
@@ -284,7 +319,7 @@ public class MyNetworkHUD : MonoBehaviour
       }
 
       GUILayout.Space(5);
-      if (GUILayout.Button("🎯 CONNECT", buttonStyle, GUILayout.Height(40)))
+      if (GUILayout.Button("CONNECT", buttonStyle, GUILayout.Height(40)))
       {
         ShowStatus("Connecting to server...");
         manager.StartClient();
@@ -297,10 +332,10 @@ public class MyNetworkHUD : MonoBehaviour
 
       // Advanced Options
       GUILayout.BeginVertical(panelStyle);
-      GUILayout.Label("⚙️ ADVANCED OPTIONS", sectionHeaderStyle);
+      GUILayout.Label("ADVANCED OPTIONS", sectionHeaderStyle);
 
       // Dedicated Server Button
-      if (GUILayout.Button("🖥️ DEDICATED SERVER", buttonStyle, GUILayout.Height(40)))
+      if (GUILayout.Button("DEDICATED SERVER", buttonStyle, GUILayout.Height(40)))
       {
         StartServer(false);
         isCollapsed = true;
@@ -319,16 +354,16 @@ public class MyNetworkHUD : MonoBehaviour
       GUILayout.EndVertical();
 #else
       GUILayout.Space(5);
-      GUILayout.Label("⚠️ WebGL can only join as client", labelStyle);
+      GUILayout.Label("WebGL can only join as client", labelStyle);
 #endif
     }
     else
     {
       // Connecting state
       GUILayout.BeginVertical(panelStyle);
-      GUILayout.Label($"🔄 Connecting to {manager.networkAddress}...", boldLabelStyle);
+      GUILayout.Label($"Connecting to {manager.networkAddress}...", boldLabelStyle);
       GUILayout.Space(5);
-      if (GUILayout.Button("❌ CANCEL", dangerButtonStyle, GUILayout.Height(35)))
+      if (GUILayout.Button("CANCEL", dangerButtonStyle, GUILayout.Height(35)))
       {
         manager.StopClient();
         ShowStatus("Connection cancelled");
@@ -340,7 +375,7 @@ public class MyNetworkHUD : MonoBehaviour
   void DrawRestartingScreen()
   {
     GUILayout.BeginVertical(panelStyle);
-    GUILayout.Label("🔄 RESTARTING SERVER", sectionHeaderStyle);
+    GUILayout.Label("RESTARTING SERVER", sectionHeaderStyle);
     GUILayout.Space(10);
     GUILayout.Label("Please wait...", labelStyle);
     GUILayout.Space(10);
@@ -356,19 +391,19 @@ public class MyNetworkHUD : MonoBehaviour
   {
     // Status Panel
     GUILayout.BeginVertical(panelStyle);
-    GUILayout.Label("📊 SERVER STATUS", sectionHeaderStyle);
+    GUILayout.Label("SERVER STATUS", sectionHeaderStyle);
 
     if (NetworkServer.active && NetworkClient.active)
     {
-      GUILayout.Label("<color=#90EE90>🏠 HOST MODE</color>", boldLabelStyle);
+      GUILayout.Label("<color=#90EE90>HOST MODE</color>", boldLabelStyle);
     }
     else if (NetworkServer.active)
     {
-      GUILayout.Label("<color=#87CEEB>🖥️ DEDICATED SERVER</color>", boldLabelStyle);
+      GUILayout.Label("<color=#87CEEB>DEDICATED SERVER</color>", boldLabelStyle);
     }
     else if (NetworkClient.isConnected)
     {
-      GUILayout.Label("<color=#FFD700>🔌 CLIENT CONNECTED</color>", boldLabelStyle);
+      GUILayout.Label("<color=#FFD700>CLIENT CONNECTED</color>", boldLabelStyle);
     }
 
     GUILayout.Space(3);
@@ -378,19 +413,19 @@ public class MyNetworkHUD : MonoBehaviour
       int playerCount = NetworkServer.connections.Count;
       string uptime = GetServerUptime();
 
-      GUILayout.Label($"👥 Players: <color=#FFA500>{playerCount}/{maxPlayers}</color>", labelStyle);
-      GUILayout.Label($"⏱️ Uptime: <color=#FFA500>{uptime}</color>", labelStyle);
-      GUILayout.Label($"🌐 Transport: <color=#FFA500>{Transport.active.GetType().Name}</color>", labelStyle);
+      GUILayout.Label($"Players: <color=#FFA500>{playerCount}/{maxPlayers}</color>", labelStyle);
+      GUILayout.Label($"Uptime: <color=#FFA500>{uptime}</color>", labelStyle);
+      GUILayout.Label($"Transport: <color=#FFA500>{Transport.active.GetType().Name}</color>", labelStyle);
 
       if (NetworkClient.active)
       {
-        GUILayout.Label($"📍 Address: <color=#FFA500>{manager.networkAddress}</color>", labelStyle);
+        GUILayout.Label($"Address: <color=#FFA500>{manager.networkAddress}</color>", labelStyle);
       }
     }
     else
     {
-      GUILayout.Label($"📍 Server: <color=#FFA500>{manager.networkAddress}</color>", labelStyle);
-      GUILayout.Label($"🌐 Transport: <color=#FFA500>{Transport.active.GetType().Name}</color>", labelStyle);
+      GUILayout.Label($"Server: <color=#FFA500>{manager.networkAddress}</color>", labelStyle);
+      GUILayout.Label($"Transport: <color=#FFA500>{Transport.active.GetType().Name}</color>", labelStyle);
     }
 
     GUILayout.EndVertical();
@@ -400,7 +435,7 @@ public class MyNetworkHUD : MonoBehaviour
     // Client Ready Button
     if (NetworkClient.isConnected && !NetworkClient.ready)
     {
-      if (GUILayout.Button("✅ READY UP!", successButtonStyle, GUILayout.Height(40)))
+      if (GUILayout.Button("READY UP!", successButtonStyle, GUILayout.Height(40)))
       {
         NetworkClient.Ready();
         if (NetworkClient.localPlayer == null)
@@ -438,7 +473,7 @@ public class MyNetworkHUD : MonoBehaviour
   void DrawPlayerList()
   {
     GUILayout.BeginVertical(panelStyle);
-    GUILayout.Label("👥 CONNECTED PLAYERS", sectionHeaderStyle);
+    GUILayout.Label("CONNECTED PLAYERS", sectionHeaderStyle);
 
     playerScrollPosition = GUILayout.BeginScrollView(playerScrollPosition, scrollViewStyle, GUILayout.Height(120));
 
@@ -452,9 +487,9 @@ public class MyNetworkHUD : MonoBehaviour
       {
         string playerName = conn.identity != null ? conn.identity.name : "Loading...";
         GUILayout.BeginHorizontal();
-        GUILayout.Label($"🎮 Player #{conn.connectionId}", labelStyle);
+        GUILayout.Label($"Player #{conn.connectionId}", labelStyle);
         GUILayout.FlexibleSpace();
-        GUILayout.Label($"{(conn.isReady ? "✅" : "⏳")}", labelStyle);
+        GUILayout.Label(conn.isReady ? "Ready" : "...", labelStyle);
         GUILayout.EndHorizontal();
       }
     }
@@ -483,7 +518,7 @@ public class MyNetworkHUD : MonoBehaviour
 
     GUILayout.EndScrollView();
 
-    if (GUILayout.Button("🗑️ Clear Logs", buttonStyle, GUILayout.Height(25)))
+    if (GUILayout.Button("Clear Logs", buttonStyle, GUILayout.Height(25)))
     {
       serverLogs.Clear();
     }
@@ -493,19 +528,19 @@ public class MyNetworkHUD : MonoBehaviour
 
   void DrawControlButtons()
   {
-    GUILayout.Label("⚙️ CONTROLS", sectionHeaderStyle);
+    GUILayout.Label("CONTROLS", sectionHeaderStyle);
 
     if (NetworkServer.active && NetworkClient.active)
     {
       // Host mode
       GUILayout.BeginHorizontal();
 
-      if (GUILayout.Button("🔄 RESTART SERVER", buttonStyle, GUILayout.Height(40)))
+      if (GUILayout.Button("RESTART SERVER", buttonStyle, GUILayout.Height(40)))
       {
         RestartServer();
       }
 
-      if (GUILayout.Button("🚪 LEAVE\n(Keep Server)", buttonStyle, GUILayout.Height(40)))
+      if (GUILayout.Button("LEAVE\n(Keep Server)", buttonStyle, GUILayout.Height(40)))
       {
         manager.StopClient();
         ShowStatus("Left game, server still running");
@@ -515,7 +550,7 @@ public class MyNetworkHUD : MonoBehaviour
 
       GUILayout.Space(3);
 
-      if (GUILayout.Button("⏹️ STOP HOST", dangerButtonStyle, GUILayout.Height(40)))
+      if (GUILayout.Button("STOP HOST", dangerButtonStyle, GUILayout.Height(40)))
       {
         manager.StopHost();
         ShowStatus("Host stopped");
@@ -525,7 +560,7 @@ public class MyNetworkHUD : MonoBehaviour
     else if (NetworkClient.isConnected)
     {
       // Client only
-      if (GUILayout.Button("🚪 DISCONNECT", dangerButtonStyle, GUILayout.Height(40)))
+      if (GUILayout.Button("DISCONNECT", dangerButtonStyle, GUILayout.Height(40)))
       {
         manager.StopClient();
         ShowStatus("Disconnected from server");
@@ -536,12 +571,12 @@ public class MyNetworkHUD : MonoBehaviour
       // Server only
       GUILayout.BeginHorizontal();
 
-      if (GUILayout.Button("🔄 RESTART", buttonStyle, GUILayout.Height(40)))
+      if (GUILayout.Button("RESTART", buttonStyle, GUILayout.Height(40)))
       {
         RestartServer();
       }
 
-      if (GUILayout.Button("⏹️ STOP", dangerButtonStyle, GUILayout.Height(40)))
+      if (GUILayout.Button("STOP", dangerButtonStyle, GUILayout.Height(40)))
       {
         manager.StopServer();
         ShowStatus("Server stopped");
@@ -557,17 +592,20 @@ public class MyNetworkHUD : MonoBehaviour
     serverStartTime = Time.time;
     serverLogs.Clear();
 
+    if (manager is MyNetworkManager myManager)
+      myManager.MatchMode = selectedMode;
+
     if (asHost)
     {
       manager.StartHost();
-      ShowStatus("Host started successfully!");
-      serverLogs.Add($"[{DateTime.Now:HH:mm:ss}] ✅ Host mode started");
+      ShowStatus($"Host started ({selectedMode})!");
+      serverLogs.Add($"[{DateTime.Now:HH:mm:ss}] Host mode started ({selectedMode})");
     }
     else
     {
       manager.StartServer();
-      ShowStatus("Dedicated server started!");
-      serverLogs.Add($"[{DateTime.Now:HH:mm:ss}] ✅ Dedicated server started");
+      ShowStatus($"Dedicated server started ({selectedMode})!");
+      serverLogs.Add($"[{DateTime.Now:HH:mm:ss}] Dedicated server started ({selectedMode})");
     }
   }
 
@@ -617,7 +655,7 @@ public class MyNetworkHUD : MonoBehaviour
 
     isRestarting = true;
     ShowStatus("Restarting server...");
-    serverLogs.Add($"[{DateTime.Now:HH:mm:ss}] 🔄 Server restart initiated");
+    serverLogs.Add($"[{DateTime.Now:HH:mm:ss}] Server restart initiated");
 
     bool wasHost = NetworkClient.active;
 
@@ -638,7 +676,7 @@ public class MyNetworkHUD : MonoBehaviour
     // Restart as host (you can make this configurable)
     StartServer(true);
     ShowStatus("Server restarted successfully!");
-    serverLogs.Add($"[{DateTime.Now:HH:mm:ss}] ✅ Server restart complete");
+    serverLogs.Add($"[{DateTime.Now:HH:mm:ss}] Server restart complete");
   }
 
   void ShowStatus(string message)

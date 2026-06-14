@@ -9,7 +9,7 @@ namespace ClashServer
     public int Max { get; }
 
     // 1 elixir per 2.8 s at 0.1 s/tick -> 1000 / (2.8 / 0.1) = 1000 / 28 ~= 35.714 milli-elixir per tick
-    private const float BASE_REGEN_PER_TICK = 1000f / 28f * 3;
+    private const float BASE_REGEN_PER_TICK = 1000f / 28f;
     private float regenRate;
     private float regenAccumulator;
 

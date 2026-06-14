@@ -18,15 +18,13 @@ public class CardDragController : MonoBehaviour, IBeginDragHandler, IDragHandler
   void Start()
   {
     cam = Camera.main;
-
   }
 
   public void OnBeginDrag(PointerEventData eventData)
   {
     _cardInitialScreenPos = slot.transform.position;
     _previewActive = false;
-    var state = GetCurrentOverlayState();
-    spawnOverlay.SetState(state);
+    spawnOverlay.SetState(GetCurrentOverlayState());
   }
 
   private SpawnOverlayState GetCurrentOverlayState()
@@ -38,8 +36,11 @@ public class CardDragController : MonoBehaviour, IBeginDragHandler, IDragHandler
 
   public void OnDrag(PointerEventData eventData)
   {
-    Vector3 worldPos = GetWorldPos(eventData.position);
-    bool inField = ClientCardPlacementService.TryGetPlacement(worldPos, slot.Config.PlacementRule, out Vector2 snappedPosition);
+    // Raw raycast position — always in server world-space (camera never rotates).
+    Vector3 rawWorldPos = GetRawWorldPos(eventData.position);
+
+    bool inField = ClientCardPlacementService.TryGetPlacement(
+        rawWorldPos, slot.Config.PlacementRule, out Vector2 snappedWorldPos);
 
     if (inField)
     {
@@ -49,12 +50,17 @@ public class CardDragController : MonoBehaviour, IBeginDragHandler, IDragHandler
         preview.Show(slot.Config);
         _previewActive = true;
       }
-      preview.UpdatePosition(new Vector3(snappedPosition.x, worldPos.y, snappedPosition.y));
+      // Preview renders at visual-space position (mirrors back for Team2).
+      Vector3 visualSnap = LocalPlayerContext.ToVisual(new Vector3(snappedWorldPos.x, rawWorldPos.y, snappedWorldPos.y));
+      preview.UpdatePosition(visualSnap);
     }
     else
     {
-      float fieldBottomScreenY = cam.WorldToScreenPoint(new Vector3(0f, 0f, ClientCardPlacementService.BottomWorldY)).y;
-      float t = Mathf.Clamp01(Mathf.InverseLerp(_cardInitialScreenPos.y, fieldBottomScreenY, eventData.position.y));
+      // The visual "entry edge" of the local player's deploy zone on screen.
+      float deployEdgeWorldZ = LocalPlayerContext.IsTeam2 ? BattleArena.RiverTop : BattleArena.Bottom;
+      float fieldEdgeScreenY = cam.WorldToScreenPoint(new Vector3(0f, 0f, deployEdgeWorldZ)).y;
+      float t = Mathf.Clamp01(
+          Mathf.InverseLerp(_cardInitialScreenPos.y, fieldEdgeScreenY, eventData.position.y));
       slot.SetUIPosition(eventData.position);
       slot.SetScale(Mathf.Lerp(1f, 0f, t));
       if (_previewActive)
@@ -71,19 +77,18 @@ public class CardDragController : MonoBehaviour, IBeginDragHandler, IDragHandler
     slot.SetUIPosition(_cardInitialScreenPos);
     slot.SetScale(1f);
 
-    Vector3 worldPos = GetWorldPos(eventData.position);
+    Vector3 rawWorldPos = GetRawWorldPos(eventData.position);
 
     if (!_previewActive ||
-        !ClientCardPlacementService.TryGetPlacement(worldPos, slot.Config.PlacementRule, out Vector2 validated))
+        !ClientCardPlacementService.TryGetPlacement(
+            rawWorldPos, slot.Config.PlacementRule, out Vector2 serverWorldPos))
     {
       preview.Hide();
       _previewActive = false;
       return;
     }
 
-    Vector3 spawnPos = new(validated.x, 0.5f, validated.y);
-
-    if (!ClientCardPlayService.TryPlayCard(slot.Config, new Vector2(spawnPos.x, spawnPos.z), slotIndex))
+    if (!ClientCardPlayService.TryPlayCard(slot.Config, serverWorldPos, slotIndex))
     {
       preview.Hide();
       return;
@@ -93,7 +98,7 @@ public class CardDragController : MonoBehaviour, IBeginDragHandler, IDragHandler
     _previewActive = false;
   }
 
-  private Vector3 GetWorldPos(Vector2 screenPos)
+  private Vector3 GetRawWorldPos(Vector2 screenPos)
   {
     Ray ray = cam.ScreenPointToRay(screenPos);
     if (Physics.Raycast(ray, out RaycastHit hit))

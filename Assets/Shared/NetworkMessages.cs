@@ -2,6 +2,13 @@ using Mirror;
 
 namespace ClashShared
 {
+  public enum MatchMode
+  {
+    PvE,
+    PvP
+  }
+
+
   public struct ClientReadyMessage : NetworkMessage
   {
   }
@@ -45,6 +52,7 @@ namespace ClashShared
     public CardId Card2;
     public CardId Card3;
     public CardId NextCardId;
+    public EntityTeam LocalTeam;
   }
 
   public struct CardDrawnMessage : NetworkMessage

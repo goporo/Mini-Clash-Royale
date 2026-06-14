@@ -133,7 +133,7 @@ public class EntityViewManager : MonoBehaviour
         continue;
 
       Vector2 pos = entityData.Position.ToUnityVector2();
-      data.targetPosition = new Vector3(pos.x, 0f, pos.y);
+      data.targetPosition = LocalPlayerContext.ToVisual(new Vector3(pos.x, 0f, pos.y));
 
       if (data.currentHP - entityData.CurrentHP > 0.05f)
         damageCues.Add(new DamageCue(entityData.Id));
@@ -249,7 +249,7 @@ public class EntityViewManager : MonoBehaviour
   private void CreateEntity(EntitySnapshot entityData)
   {
     Vector2 pos = entityData.Position.ToUnityVector2();
-    Vector3 worldPos = new(pos.x, 0f, pos.y);
+    Vector3 worldPos = LocalPlayerContext.ToVisual(new Vector3(pos.x, 0f, pos.y));
 
     GameObject prefab = GetPrefabForType(entityData.Type);
     GameObject go = Instantiate(prefab, worldPos, Quaternion.identity);

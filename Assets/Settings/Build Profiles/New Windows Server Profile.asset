@@ -18,8 +18,10 @@ MonoBehaviour:
   m_PlatformId: 8d1e1bca926649cba89d37a4c66e8b3d
   m_PlatformBuildProfile:
     rid: 1459619892071760055
-  m_OverrideGlobalSceneList: 0
-  m_Scenes: []
+  m_OverrideGlobalSceneList: 1
+  m_Scenes:
+  - m_enabled: 1
+    m_path: Assets/Scenes/Server Scene.unity
   m_ScriptingDefines: []
   m_PlayerSettingsYaml:
     m_Settings: []

@@ -6,7 +6,6 @@ public class BattleUI : MonoBehaviour
   public static BattleUI Instance { get; private set; }
 
   public ElixirContainer ElixirContainer;
-  public BattleHand battleHand;
 
   private void Awake()
   {
@@ -16,6 +15,6 @@ public class BattleUI : MonoBehaviour
   public void UpdateElixir(int current)
   {
     ElixirContainer?.UpdateElixir(current);
-    (battleHand != null ? battleHand : BattleHand.Instance)?.UpdateElixir(current);
+    BattleHand.Instance?.UpdateElixir(current);
   }
 }
