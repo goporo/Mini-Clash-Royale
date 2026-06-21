@@ -592,9 +592,6 @@ public class MyNetworkHUD : MonoBehaviour
     serverStartTime = Time.time;
     serverLogs.Clear();
 
-    if (manager is MyNetworkManager myManager)
-      myManager.MatchMode = selectedMode;
-
     if (asHost)
     {
       manager.StartHost();

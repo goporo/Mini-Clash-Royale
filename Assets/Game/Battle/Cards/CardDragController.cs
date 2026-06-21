@@ -24,6 +24,7 @@ public class CardDragController : MonoBehaviour, IBeginDragHandler, IDragHandler
   {
     _cardInitialScreenPos = slot.transform.position;
     _previewActive = false;
+    GameplayEvents.Publish(new BattleCardInteractedEvent());
     spawnOverlay.SetState(GetCurrentOverlayState());
   }
 

@@ -1,5 +1,6 @@
 using Mirror;
 using ClashShared;
+using System.Collections.Generic;
 
 namespace ClashServer
 {
@@ -11,16 +12,12 @@ namespace ClashServer
     public BattleDeck Deck { get; }
     public uint LastSeenPlayRequestId { get; private set; }
 
-    public PlayerState(NetworkConnectionToClient conn, EntityTeam team)
+    public PlayerState(NetworkConnectionToClient conn, EntityTeam team, List<CardId> deck)
     {
       Connection = conn;
       Team = team;
       ElixirState = new ElixirState();
-      Deck = new BattleDeck(new[]
-      {
-        CardId.SkeletonBarrel, CardId.WallBreakers, CardId.Skeletons, CardId.SpearGoblins,
-        CardId.Minions, CardId.GoblinGang, CardId.Giant, CardId.Bomber
-      });
+      Deck = new BattleDeck(deck);
       LastSeenPlayRequestId = 0;
     }
 

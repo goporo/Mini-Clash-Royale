@@ -61,6 +61,14 @@ namespace ClashShared
 
   public enum StatusKind { Slow }
 
+  public static class CardIdHelper
+  {
+    public static CardId[] GetAllPlayableCards() =>
+      System.Array.FindAll(
+        (CardId[])System.Enum.GetValues(typeof(CardId)),
+        id => (ushort)id is >= 100 and <= 199);
+  }
+
   public static class CardCostTable
   {
     public static int GetMilliElixirCost(CardId cardId)

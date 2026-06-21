@@ -1,3 +1,4 @@
+using System;
 using Mirror;
 using UnityEngine;
 using ClashBattle;
@@ -8,50 +9,65 @@ public class MyNetworkManager : NetworkManager, IClientBattleTransport
 {
   public bool IsConnected => NetworkClient.isConnected;
 
-  [HideInInspector] public MatchMode MatchMode = MatchMode.PvE;
-
   public override void Awake()
   {
-    System.Console.WriteLine("[Server] Awake() called");
     base.Awake();
-#if UNITY_SERVER
-    System.Console.WriteLine("[Server] UNITY_SERVER defined — configuring headless mode");
-    MatchMode = MatchMode.PvP;
-    headlessStartMode = HeadlessStartOptions.AutoStartServer;
 
     string[] args = System.Environment.GetCommandLineArgs();
-    for (int i = 0; i < args.Length - 1; i++)
-    {
-      if (args[i] == "-port" && ushort.TryParse(args[i + 1], out ushort port))
-      {
-        if (Transport.active is PortTransport pt)
-          pt.Port = port;
-        Debug.Log($"[Server] Port set to {port} from command line");
-      }
-    }
+    bool isHeadless = Array.IndexOf(args, "-batchmode") >= 0;
 
-    Debug.Log("[Server] ========================================");
-    Debug.Log("[Server] Dedicated Server Build starting...");
-    ushort activePort = Transport.active is PortTransport p ? p.Port : (ushort)7777;
-    Debug.Log($"[Server] Port: {activePort}");
-    Debug.Log("[Server] ========================================");
-#endif
+    if (isHeadless)
+    {
+      headlessStartMode = HeadlessStartOptions.AutoStartServer;
+
+      for (int i = 0; i < args.Length - 1; i++)
+      {
+        if (args[i] == "-port" && ushort.TryParse(args[i + 1], out ushort port))
+        {
+          if (Transport.active is PortTransport pt)
+            pt.Port = port;
+        }
+      }
+
+      ushort activePort = Transport.active is PortTransport p ? p.Port : (ushort)7777;
+      Debug.Log($"[Server] Dedicated server starting on port {activePort}");
+    }
+  }
+
+  [Header("Dev")]
+  [SerializeField] bool useLocalServer = false;
+
+  [Header("Meta Server")]
+  public string MetaBaseUrl = "http://localhost:5000";
+  public string MetaInternalKey = "";
+
+  [HideInInspector] public string PendingMatchId;
+  [HideInInspector] public string PendingPlayerToken;
+  [HideInInspector] public ushort[] PendingDeck;
+
+  public override void Start()
+  {
+    base.Start();
+    if (useLocalServer)
+    {
+      onlineScene = "";
+      StartServer();
+    }
   }
 
   public override void OnStartServer()
   {
     base.OnStartServer();
 
+    MatchRegistry.MetaBaseUrl = MetaBaseUrl;
+    MatchRegistry.InternalKey = MetaInternalKey;
+
     NetworkServer.RegisterHandler<PlayCardMessage>(OnPlayCardMessage);
     NetworkServer.RegisterHandler<ClientReadyMessage>(OnClientReadyMessage);
 
-    var transport = Transport.active;
-    string address = networkAddress;
-    ushort port = (transport is PortTransport pt) ? pt.Port : (ushort)0;
-
+    ushort port = Transport.active is PortTransport pt ? pt.Port : (ushort)0;
     Debug.Log("[Server] ========================================");
     Debug.Log($"[Server] Server ONLINE — listening on port {port}");
-    Debug.Log($"[Server] Match mode: {MatchMode}");
     Debug.Log("[Server] Waiting for players...");
     Debug.Log("[Server] ========================================");
   }
@@ -61,6 +77,7 @@ public class MyNetworkManager : NetworkManager, IClientBattleTransport
     base.OnStartClient();
     ClientBattleGateway.Transport = this;
 
+    NetworkClient.RegisterHandler<MatchReadyMessage>(OnMatchReadyMessage);
     NetworkClient.RegisterHandler<FullSnapshotMessage>(OnFullSnapshotMessage);
     NetworkClient.RegisterHandler<DeltaSnapshotMessage>(OnDeltaSnapshotMessage);
     NetworkClient.RegisterHandler<SpellCastMessage>(OnSpellCastMessage);
@@ -84,104 +101,70 @@ public class MyNetworkManager : NetworkManager, IClientBattleTransport
   {
     if (ReferenceEquals(ClientBattleGateway.Transport, this))
       ClientBattleGateway.Transport = null;
-
     base.OnStopClient();
-  }
-
-  public void SendPlayCard(uint requestId, CardId cardId, Vector2Data position)
-  {
-    NetworkClient.Send(new PlayCardMessage
-    {
-      RequestId = requestId,
-      CardId = cardId,
-      Position = position
-    });
-  }
-
-  void OnPlayCardMessage(NetworkConnectionToClient conn, PlayCardMessage msg)
-  {
-    if (ServerMatchController.Instance != null)
-    {
-      System.Numerics.Vector2 position = msg.Position.ToVector2();
-      ServerMatchController.Instance.Server_PlayCard(conn, msg.RequestId, msg.CardId, position);
-    }
-  }
-
-  void OnClientReadyMessage(NetworkConnectionToClient conn, ClientReadyMessage msg)
-  {
-    ServerMatchController.Instance?.HandleClientReady(conn);
-  }
-
-  void OnFullSnapshotMessage(FullSnapshotMessage msg)
-  {
-    ClientBattleGateway.PublishFullSnapshot(msg.Snapshot);
-  }
-
-  void OnDeltaSnapshotMessage(DeltaSnapshotMessage msg)
-  {
-    ClientBattleGateway.PublishDeltaSnapshot(msg.Delta);
-  }
-
-  void OnSpellCastMessage(SpellCastMessage msg)
-  {
-    ClientBattleGateway.PublishSpellCast(msg);
-  }
-
-  void OnPlayCardFailedMessage(PlayCardFailedMessage msg)
-  {
-    ClientBattleGateway.PublishPlayCardFailed(msg.Reason);
-  }
-
-  void OnMatchEndedMessage(MatchEndedMessage msg)
-  {
-    ClientBattleGateway.PublishMatchEnded(msg.Winner);
-  }
-
-  void OnElixirUpdateMessage(ElixirUpdateMessage msg)
-  {
-    ClientBattleGateway.PublishElixirUpdated(msg.MilliElixir);
-  }
-
-  void OnHandStateMessage(HandStateMessage msg)
-  {
-    ClientBattleGateway.PublishHandState(msg);
-  }
-
-  void OnCardDrawnMessage(CardDrawnMessage msg)
-  {
-    ClientBattleGateway.PublishCardDrawn(msg);
-  }
-
-  public override void OnServerConnect(NetworkConnectionToClient conn)
-  {
-    int playerCount = NetworkServer.connections.Count;
-    Debug.Log($"[Server] >> Player connected | connId={conn.connectionId} | address={conn.address} | total={playerCount}");
-    base.OnServerConnect(conn);
-  }
-
-  public override void OnServerDisconnect(NetworkConnectionToClient conn)
-  {
-    int playerCount = NetworkServer.connections.Count - 1;
-    Debug.Log($"[Server] << Player disconnected | connId={conn.connectionId} | remaining={playerCount}");
-    base.OnServerDisconnect(conn);
-  }
-
-  public override void OnServerAddPlayer(NetworkConnectionToClient conn)
-  {
-    // Do not spawn a player prefab — server tracks players via ServerMatchController
   }
 
   public override void OnClientConnect()
   {
-    Debug.Log("[Client] Connected to server");
     base.OnClientConnect();
-
-    NetworkClient.Send(new ClientReadyMessage());
+    Debug.Log("[Client] Connected to server");
+    UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnBattleSceneLoaded;
+    UnityEngine.SceneManagement.SceneManager.LoadScene("Battle Scene");
   }
+
+  void OnBattleSceneLoaded(UnityEngine.SceneManagement.Scene scene, UnityEngine.SceneManagement.LoadSceneMode mode)
+  {
+    if (scene.name != "Battle Scene") return;
+    UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnBattleSceneLoaded;
+    Debug.Log("[Client] Battle Scene loaded — sending ClientReadyMessage");
+    NetworkClient.Send(new ClientReadyMessage { MatchId = PendingMatchId, PlayerToken = PendingPlayerToken, Deck = PendingDeck });
+  }
+
+  void OnMatchReadyMessage(MatchReadyMessage msg) { }
 
   public override void OnClientDisconnect()
   {
     Debug.Log("[Client] Disconnected from server");
     base.OnClientDisconnect();
   }
+
+  public void SendPlayCard(uint requestId, CardId cardId, Vector2Data position)
+  {
+    NetworkClient.Send(new PlayCardMessage { RequestId = requestId, CardId = cardId, Position = position });
+  }
+
+  void OnPlayCardMessage(NetworkConnectionToClient conn, PlayCardMessage msg)
+  {
+    if (ServerMatchController.Instance != null)
+      ServerMatchController.Instance.Server_PlayCard(conn, msg.RequestId, msg.CardId, msg.Position.ToVector2());
+  }
+
+  void OnClientReadyMessage(NetworkConnectionToClient conn, ClientReadyMessage msg)
+  {
+    if (ServerMatchController.Instance != null)
+      ServerMatchController.Instance.HandleClientReady(conn, msg.MatchId, msg.PlayerToken, msg.Deck);
+  }
+
+  void OnFullSnapshotMessage(FullSnapshotMessage msg) => ClientBattleGateway.PublishFullSnapshot(msg.Snapshot);
+  void OnDeltaSnapshotMessage(DeltaSnapshotMessage msg) => ClientBattleGateway.PublishDeltaSnapshot(msg.Delta);
+  void OnSpellCastMessage(SpellCastMessage msg) => ClientBattleGateway.PublishSpellCast(msg);
+  void OnPlayCardFailedMessage(PlayCardFailedMessage msg) => ClientBattleGateway.PublishPlayCardFailed(msg.Reason);
+  void OnMatchEndedMessage(MatchEndedMessage msg) => ClientBattleGateway.PublishMatchEnded(msg.Winner);
+  void OnElixirUpdateMessage(ElixirUpdateMessage msg) => ClientBattleGateway.PublishElixirUpdated(msg.MilliElixir);
+  void OnHandStateMessage(HandStateMessage msg) => ClientBattleGateway.PublishHandState(msg);
+  void OnCardDrawnMessage(CardDrawnMessage msg) => ClientBattleGateway.PublishCardDrawn(msg);
+
+  public override void OnServerConnect(NetworkConnectionToClient conn)
+  {
+    Debug.Log($"[Server] >> Player connected | connId={conn.connectionId} | address={conn.address} | total={NetworkServer.connections.Count}");
+    base.OnServerConnect(conn);
+  }
+
+  public override void OnServerDisconnect(NetworkConnectionToClient conn)
+  {
+    Debug.Log($"[Server] << Player disconnected | connId={conn.connectionId} | remaining={NetworkServer.connections.Count - 1}");
+    base.OnServerDisconnect(conn);
+  }
+
+  public override void OnServerAddPlayer(NetworkConnectionToClient conn) { }
 }

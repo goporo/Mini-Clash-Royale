@@ -17,3 +17,5 @@ public struct CardPlayedEvent : IGameEvent
   }
 }
 
+public struct BattleCardInteractedEvent : IGameEvent { }
+

@@ -11,7 +11,12 @@ namespace ClashShared
 
   public struct ClientReadyMessage : NetworkMessage
   {
+    public string MatchId;
+    public string PlayerToken;
+    public ushort[] Deck; // PvE only — 8 card ids; null/empty means server uses random
   }
+
+  public struct MatchReadyMessage : NetworkMessage { }
 
   public struct FullSnapshotMessage : NetworkMessage
   {
