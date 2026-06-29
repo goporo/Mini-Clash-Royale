@@ -34,5 +34,12 @@ namespace ClashMeta
       public const string MatchStatus = "/battle/find/status";
       public const string CancelMatch = "/battle/find/cancel";
     }
+
+    public static class Chests
+    {
+      public const string Get         = "/chests";
+      public static string StartUnlock(string chestId) => $"/chests/{chestId}/start-unlock";
+      public static string Open(string chestId)        => $"/chests/{chestId}/open";
+    }
   }
 }

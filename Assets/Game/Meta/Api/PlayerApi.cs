@@ -1,9 +1,78 @@
 using System;
 using System.Collections;
+using System.Globalization;
 using UnityEngine;
 
 namespace ClashMeta
 {
+  // ── Chest data models ──────────────────────────────────────────────────────
+
+  public enum ChestType   { Silver, Gold, Giant, Magical, Epic, Legendary, Starter }
+  public enum ChestStatus { Locked, Unlocking, Ready }
+
+  [Serializable]
+  public class ChestData
+  {
+    public string id;
+    public int    type;
+    public int    status;
+    public int    slotIndex;
+    public string unlockStartedAt;
+    public string unlockReadyAt;
+    public int    unlockDurationSeconds;
+
+    public ChestType   Type   => (ChestType)type;
+    public ChestStatus Status => (ChestStatus)status;
+
+    public bool IsReadyByTime()
+    {
+      if (string.IsNullOrEmpty(unlockReadyAt)) return false;
+      if (!DateTime.TryParse(unlockReadyAt, null, DateTimeStyles.AdjustToUniversal, out var ready)) return false;
+      return DateTime.UtcNow >= ready;
+    }
+
+    public TimeSpan RemainingTime()
+    {
+      if (string.IsNullOrEmpty(unlockReadyAt)) return TimeSpan.Zero;
+      if (!DateTime.TryParse(unlockReadyAt, null, DateTimeStyles.AdjustToUniversal, out var ready)) return TimeSpan.Zero;
+      var span = ready - DateTime.UtcNow;
+      return span < TimeSpan.Zero ? TimeSpan.Zero : span;
+    }
+  }
+
+  [Serializable]
+  public class ChestListResponse
+  {
+    public ChestData[] chests;
+  }
+
+  [Serializable]
+  public class StartUnlockResponse
+  {
+    public string id;
+    public int    status;
+    public string unlockReadyAt;
+  }
+
+  [Serializable]
+  public class ChestCardReward
+  {
+    public string cardId;
+    public int    copies;
+  }
+
+  [Serializable]
+  public class ChestRewards
+  {
+    public int              gold;
+    public ChestCardReward[] cards;
+  }
+
+  [Serializable]
+  public class OpenChestResponse
+  {
+    public ChestRewards rewards;
+  }
   [Serializable]
   public class PlayerProfile
   {
@@ -95,6 +164,32 @@ namespace ClashMeta
     public static IEnumerator GetDecks(Action<DeckListResponse> onDone)
     {
       yield return MetaApiClient.Get<DeckListResponse>(ApiConstants.Deck.Get, result =>
+      {
+        onDone(result.Success ? result.Data : null);
+      });
+    }
+
+    // ── Chest API ──────────────────────────────────────────────────────────────
+
+    public static IEnumerator GetChests(Action<ChestListResponse> onDone)
+    {
+      yield return MetaApiClient.Get<ChestListResponse>(ApiConstants.Chests.Get, result =>
+      {
+        onDone(result.Success ? result.Data : null);
+      });
+    }
+
+    public static IEnumerator StartUnlockChest(string chestId, Action<StartUnlockResponse> onDone)
+    {
+      yield return MetaApiClient.Post<StartUnlockResponse>(ApiConstants.Chests.StartUnlock(chestId), null, result =>
+      {
+        onDone(result.Success ? result.Data : null);
+      });
+    }
+
+    public static IEnumerator OpenChest(string chestId, Action<OpenChestResponse> onDone)
+    {
+      yield return MetaApiClient.Post<OpenChestResponse>(ApiConstants.Chests.Open(chestId), null, result =>
       {
         onDone(result.Success ? result.Data : null);
       });
