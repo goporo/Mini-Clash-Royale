@@ -71,8 +71,16 @@ namespace ClashServer
     // Trả về false nếu room đã đủ 2 người
     public bool TryAddPlayer(NetworkConnectionToClient conn, List<CardId> deck, EntityTeam team)
     {
-      if (players.Count >= 2) return false;
-      if (players.Values.Any(p => p.Team == team)) return false;
+      if (players.Count >= 2)
+      {
+        Debug.LogWarning($"[Room {MatchId}] TryAddPlayer rejected conn {conn.connectionId} — room already full");
+        return false;
+      }
+      if (players.Values.Any(p => p.Team == team))
+      {
+        Debug.LogWarning($"[Room {MatchId}] TryAddPlayer rejected conn {conn.connectionId} — team {team} already taken");
+        return false;
+      }
 
       var playerState = new PlayerState(conn, team, deck);
       players[conn] = playerState;
@@ -83,13 +91,19 @@ namespace ClashServer
 
     public void HandleClientReady(NetworkConnectionToClient conn)
     {
-      if (!players.TryGetValue(conn, out var playerState)) return;
+      if (!players.TryGetValue(conn, out var playerState))
+      {
+        Debug.LogWarning($"[Room {MatchId}] HandleClientReady — conn {conn.connectionId} not in players, ignoring");
+        return;
+      }
 
       clientsNeedingFullSnapshot.Add(conn);
 
       bool shouldStart = matchMode == MatchMode.PvE
         ? players.Count >= 1
         : players.Count == 2 && clientsNeedingFullSnapshot.Count == 2;
+
+      Debug.Log($"[Room {MatchId}] Ready received from conn {conn.connectionId} ({playerState.Team}) — players={players.Count}/2, readyCount={clientsNeedingFullSnapshot.Count}, shouldStart={shouldStart}");
 
       if (shouldStart && !matchStarted)
       {
@@ -168,7 +182,7 @@ namespace ClashServer
         return;
       }
 
-      if (!matchManager.TryValidatePlayCard(cardId, position, playerState.Team, out string valFail))
+      if (!matchManager.TryValidatePlayCard(cardId, position, playerState.Team, gameplayDirector, out string valFail))
       {
         sender.Send(new PlayCardFailedMessage { Reason = valFail });
         return;
@@ -188,13 +202,16 @@ namespace ClashServer
       sender.Send(new CardDrawnMessage { PlayedCardId = cardId, NewCardId = drawnCardId, NextCardId = playerState.Deck.NextCardId });
     }
 
-    public void HandlePlayerDisconnected(NetworkConnectionToClient conn)
+    // Trả về true nếu room không còn ai — gọi ý cho caller dọn khỏi MatchRegistry
+    public bool HandlePlayerDisconnected(NetworkConnectionToClient conn)
     {
       if (players.TryGetValue(conn, out var state))
         Debug.Log($"[Room {MatchId}] Player {conn.connectionId} ({state.Team}) disconnected");
 
       players.Remove(conn);
       clientsNeedingFullSnapshot.Remove(conn);
+
+      return players.Count == 0;
     }
 
     public bool HasPlayer(NetworkConnectionToClient conn) => players.ContainsKey(conn);

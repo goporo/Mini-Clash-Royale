@@ -89,7 +89,7 @@ namespace ClashServer
       if (bestScore < 2.75f)
         return false;
 
-      return TryCommitPlay(executionTick, CardId.Fireball, new[] { bestPosition }, matchManager, RandomTicks(6, 10), out command);
+      return TryCommitPlay(executionTick, CardId.Fireball, new[] { bestPosition }, matchManager, director, RandomTicks(6, 10), out command);
     }
 
     private bool TryCreateDefenseCommand(int executionTick, GameplayDirector director, MatchManager matchManager, out MatchCommand command)
@@ -120,7 +120,7 @@ namespace ClashServer
           ? GetDefensiveBuildingCandidates(lane)
           : GetDefensiveTroopCandidates(threat.Position, cardId);
 
-        if (TryCommitPlay(executionTick, cardId, candidates, matchManager, RandomTicks(4, 7), out command))
+        if (TryCommitPlay(executionTick, cardId, candidates, matchManager, director, RandomTicks(4, 7), out command))
           return true;
       }
 
@@ -150,6 +150,7 @@ namespace ClashServer
           cardId,
           GetSupportCandidates(giant.Position, GetLane(giant.Position.X)),
           matchManager,
+          director,
           RandomTicks(5, 8),
           out command))
         {
@@ -178,6 +179,7 @@ namespace ClashServer
         CardId.Giant,
         GetBacklinePushCandidates(lane),
         matchManager,
+        director,
         RandomTicks(8, 12),
         out command);
     }
@@ -206,6 +208,7 @@ namespace ClashServer
           cardId,
           GetBridgePressureCandidates(lane, cardId),
           matchManager,
+          director,
           RandomTicks(5, 9),
           out command))
         {
@@ -221,6 +224,7 @@ namespace ClashServer
       CardId cardId,
       IEnumerable<Vector2> candidatePositions,
       MatchManager matchManager,
+      GameplayDirector director,
       int cooldownTicks,
       out MatchCommand command)
     {
@@ -228,7 +232,7 @@ namespace ClashServer
 
       foreach (Vector2 candidate in candidatePositions)
       {
-        if (!matchManager.TryValidatePlayCard(cardId, candidate, state.Team, out _))
+        if (!matchManager.TryValidatePlayCard(cardId, candidate, state.Team, director, out _))
           continue;
 
         if (!state.CommitPlay(cardId))

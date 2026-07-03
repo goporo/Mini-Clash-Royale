@@ -12,6 +12,7 @@ namespace ClashServer
     private readonly Dictionary<int, EntityState> lastSnapshotState = new();
     private readonly ILogger logger;
     private readonly BoardManager boardManager;
+    private readonly TargetingSystem targetingSystem;
     private readonly MovementSystem movementSystem;
     private readonly CombatSystem combatSystem;
     private readonly DamageResolver damageResolver;
@@ -25,7 +26,7 @@ namespace ClashServer
       this.boardManager = boardManager ?? throw new ArgumentNullException(nameof(boardManager));
       this.logger = logger ?? new ConsoleLogger();
 
-      var targetingSystem = new TargetingSystem();
+      targetingSystem = new TargetingSystem();
       movementSystem = new MovementSystem(boardManager, targetingSystem);
       combatSystem = new CombatSystem(targetingSystem);
       damageResolver = new DamageResolver(this.logger);
@@ -41,6 +42,7 @@ namespace ClashServer
         .OrderBy(entity => entity.Id)
         .ToList();
 
+      targetingSystem.UpdateTargets(liveEntities);
       movementSystem.UpdatePositions(liveEntities, currentTick);
       var (pendingDamage, pendingStatuses, pendingEffects) = combatSystem.CollectPending(liveEntities);
       foreach (PendingEntityEffect pe in pendingEffects)
@@ -54,6 +56,15 @@ namespace ClashServer
           ps.Target.ApplyStatus(ps.Kind, ps.DurationTicks, ps.Magnitude);
       foreach (ServerEntity entity in liveEntities)
         entity.TickStatusEffects();
+      foreach (ServerEntity entity in liveEntities)
+      {
+        if (entity.TickLifetimeDecay())
+        {
+          EntityEffectContext ctx = entity.HandleDeath(liveEntities);
+          if (ctx != null)
+            spawnRequests.AddRange(ctx.SpawnRequests);
+        }
+      }
       foreach (SpawnRequest req in spawnRequests)
         SpawnEntity(req.EntityType, req.Position, req.Team);
 
@@ -204,7 +215,8 @@ namespace ClashServer
         entity.Target?.Id ?? -1,
         entity.IsAlive,
         entity.IsBuilding,
-        entity.IsSlowed);
+        entity.IsSlowed,
+        entity.IsDecaying);
     }
 
     public uint CurrentTick => currentTick;

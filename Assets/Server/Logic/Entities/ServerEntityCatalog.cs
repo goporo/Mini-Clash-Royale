@@ -132,6 +132,7 @@ namespace ClashServer
           CollisionRadius = s.CollisionRadius,
           PushWeight = s.PushWeight,
           Movement = MovementKind.Stationary,
+          LifetimeTicks = Ticks(s.LifetimeSeconds),
           Targeting = new TargetingRule { Category = TargetCategory.AnyEnemy, Layers = TargetLayer.Ground },
           Attack = new AttackRule
           {

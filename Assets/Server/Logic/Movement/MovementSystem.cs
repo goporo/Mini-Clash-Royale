@@ -6,15 +6,23 @@ using ClashShared;
 
 namespace ClashServer
 {
+  /// <summary>
+  /// Steers entities toward the goal decided by TargetingSystem (attack target, or the
+  /// nearest enemy building as a march objective) and resolves collisions afterwards.
+  /// Target selection itself happens earlier in the tick, in TargetingSystem.UpdateTargets.
+  /// </summary>
   public sealed class MovementSystem
   {
-    private const int PathRecalcInterval = 3;
     private const int MovementResolveIterations = 6;
     private const float WaypointReachedEpsilon = 0.05f;
     private const float OverlapEpsilon = 0.001f;
 
     private readonly BoardManager boardManager;
     private readonly TargetingSystem targetingSystem;
+
+    private readonly IMovementStrategy stationaryMovement = new StationaryMovement();
+    private readonly IMovementStrategy groundMovement = new GroundPathMovement();
+    private readonly IMovementStrategy airMovement = new AirDirectMovement();
 
     public MovementSystem(BoardManager boardManager, TargetingSystem targetingSystem)
     {
@@ -33,14 +41,7 @@ namespace ClashServer
 
     private Vector2 GetDesiredPosition(ServerEntity entity, IReadOnlyList<ServerEntity> liveEntities, uint currentTick)
     {
-      ServerEntity newTarget = entity.Target;
-      if (newTarget == null || !newTarget.IsAlive)
-        newTarget = targetingSystem.AcquireNearestTarget(entity, liveEntities, entity.Definition.Targeting);
-
-      if (!ReferenceEquals(newTarget, entity.Target))
-        entity.SetTarget(newTarget);
-
-      if (entity.Stats.MovePerTick <= 0f)
+      if (entity.Stats.MovePerTick <= 0f || entity.Definition.Movement == MovementKind.Stationary)
         return entity.Position;
 
       if (entity.Target != null && targetingSystem.IsInRange(entity, entity.Target, entity.Definition.Attack.Range))
@@ -49,31 +50,32 @@ namespace ClashServer
         return entity.Position;
       }
 
-      if (entity.Definition.Movement == MovementKind.Stationary)
-        return entity.Position;
-
-      Vector2 goal = entity.Target != null
-        ? entity.Target.Position
-        : new Vector2(entity.Position.X, entity.Team == EntityTeam.Team1 ? NavGrid.WORLD_TOP : NavGrid.WORLD_BOTTOM);
-
-      if (entity.Definition.Movement == MovementKind.Air)
-        return MoveTowards(entity.Position, goal, entity.EffectiveMovePerTick);
-
-      if (entity.Path == null || currentTick >= entity.PathRecalcTick)
-      {
-        entity.SetPath(
-          Pathfinder.FindPath(entity.Position, goal, boardManager),
-          currentTick + PathRecalcInterval);
-      }
-
-      if (entity.Path != null && entity.Path.Count > 0)
-      {
-        Vector2 next = entity.Path[0];
-        return MoveTowards(entity.Position, next, entity.EffectiveMovePerTick);
-      }
-
-      return entity.Position;
+      Vector2 goal = ResolveGoal(entity, liveEntities);
+      var query = new MovementQuery(goal, currentTick, boardManager);
+      return GetStrategy(entity).GetDesiredPosition(entity, in query);
     }
+
+    // Chase the attack target when we have one; otherwise march on the nearest enemy
+    // building (Clash Royale lane push). Straight forward is a last resort when the
+    // enemy has no buildings left.
+    private Vector2 ResolveGoal(ServerEntity entity, IReadOnlyList<ServerEntity> liveEntities)
+    {
+      if (entity.Target != null)
+        return entity.Target.Position;
+
+      ServerEntity objective = targetingSystem.FindMarchObjective(entity, liveEntities);
+      if (objective != null)
+        return objective.Position;
+
+      return new Vector2(entity.Position.X, entity.Team == EntityTeam.Team1 ? NavGrid.WORLD_TOP : NavGrid.WORLD_BOTTOM);
+    }
+
+    private IMovementStrategy GetStrategy(ServerEntity entity) => entity.Definition.Movement switch
+    {
+      MovementKind.Air => airMovement,
+      MovementKind.Stationary => stationaryMovement,
+      _ => groundMovement
+    };
 
     private void ResolveMovement(IReadOnlyList<ServerEntity> liveEntities, Dictionary<int, Vector2> desiredPositions)
     {
@@ -93,9 +95,9 @@ namespace ClashServer
 
       var resolvedPositions = new Dictionary<int, Vector2>(groundMobile.Count + airMobile.Count);
       foreach (ServerEntity entity in groundMobile)
-        resolvedPositions[entity.Id] = ClampToArena(desiredPositions[entity.Id], entity.CollisionRadius);
+        resolvedPositions[entity.Id] = MovementMath.ClampToArena(desiredPositions[entity.Id], entity.CollisionRadius);
       foreach (ServerEntity entity in airMobile)
-        resolvedPositions[entity.Id] = ClampToArena(desiredPositions[entity.Id], entity.CollisionRadius);
+        resolvedPositions[entity.Id] = MovementMath.ClampToArena(desiredPositions[entity.Id], entity.CollisionRadius);
 
       // Ground: resolve building collisions + ground-ground overlap
       for (int iteration = 0; iteration < MovementResolveIterations; iteration++)
@@ -121,11 +123,11 @@ namespace ClashServer
 
       foreach (ServerEntity entity in groundMobile)
       {
-        entity.MoveTo(KeepOnWalkableCell(entity, ClampToArena(resolvedPositions[entity.Id], entity.CollisionRadius)));
+        entity.MoveTo(KeepOnWalkableCell(entity, MovementMath.ClampToArena(resolvedPositions[entity.Id], entity.CollisionRadius)));
         AdvancePathProgress(entity);
       }
       foreach (ServerEntity entity in airMobile)
-        entity.MoveTo(ClampToArena(resolvedPositions[entity.Id], entity.CollisionRadius));
+        entity.MoveTo(MovementMath.ClampToArena(resolvedPositions[entity.Id], entity.CollisionRadius));
     }
 
     private bool ResolveStaticCollisions(
@@ -153,7 +155,7 @@ namespace ClashServer
         adjusted = building.Position + normal * (minDistance + OverlapEpsilon);
       }
 
-      adjusted = KeepOnWalkableCell(entity, ClampToArena(adjusted, entity.CollisionRadius));
+      adjusted = KeepOnWalkableCell(entity, MovementMath.ClampToArena(adjusted, entity.CollisionRadius));
       if ((adjusted - original).LengthSquared() <= OverlapEpsilon * OverlapEpsilon)
         return false;
 
@@ -188,8 +190,8 @@ namespace ClashServer
       aPos -= normal * overlap * aDisplacementShare;
       bPos += normal * overlap * bDisplacementShare;
 
-      resolvedPositions[a.Id] = ClampToArena(aPos, a.CollisionRadius);
-      resolvedPositions[b.Id] = ClampToArena(bPos, b.CollisionRadius);
+      resolvedPositions[a.Id] = MovementMath.ClampToArena(aPos, a.CollisionRadius);
+      resolvedPositions[b.Id] = MovementMath.ClampToArena(bPos, b.CollisionRadius);
       return true;
     }
 
@@ -240,27 +242,9 @@ namespace ClashServer
       if (NavGrid.IsWalkable(cx, cy, boardManager))
         return position;
 
-      Vector2 fallback = ClampToArena(entity.Position, entity.CollisionRadius);
+      Vector2 fallback = MovementMath.ClampToArena(entity.Position, entity.CollisionRadius);
       var (fx, fy) = NavGrid.WorldToCell(fallback);
       return NavGrid.IsWalkable(fx, fy, boardManager) ? fallback : position;
-    }
-
-    private static Vector2 MoveTowards(Vector2 from, Vector2 to, float maxDistance)
-    {
-      Vector2 delta = to - from;
-      float distance = delta.Length();
-
-      if (distance <= maxDistance || distance <= OverlapEpsilon)
-        return to;
-
-      return from + delta / distance * maxDistance;
-    }
-
-    private static Vector2 ClampToArena(Vector2 position, float radius)
-    {
-      return new Vector2(
-        Math.Clamp(position.X, NavGrid.WORLD_LEFT + radius, NavGrid.WORLD_RIGHT - radius),
-        Math.Clamp(position.Y, NavGrid.WORLD_BOTTOM + radius, NavGrid.WORLD_TOP - radius));
     }
 
     private static Vector2 GetDeterministicSeparationDirection(int firstId, int secondId)

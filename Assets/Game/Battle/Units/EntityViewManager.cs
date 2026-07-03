@@ -43,6 +43,25 @@ public class EntityViewManager : MonoBehaviour
 
   private static CardStats Stats(CardId type) => CardStatsTable.Get(type);
 
+  // A decaying building bleeds MaxHP/lifetime per tick. We suppress the take-damage flash for
+  // those routine ticks, but a real hit drops far more HP — so only treat the drop as decay when
+  // it stays under a small multiple of the expected per-tick loss. That keeps real hits flashing
+  // even while the building is decaying.
+  private static bool IsDecayTick(EntitySnapshot entityData, float hpDrop)
+  {
+    if (!entityData.IsDecaying)
+      return false;
+
+    float lifetimeSeconds = Stats(entityData.Type).LifetimeSeconds;
+    if (lifetimeSeconds <= 0f)
+      return false;
+
+    // Expected decay per server tick, with headroom for a few batched ticks of latency.
+    float lifetimeTicks = lifetimeSeconds / ClashServer.ServerTickSettings.FixedDeltaTime;
+    float decayPerTick = entityData.MaxHP / lifetimeTicks;
+    return hpDrop <= decayPerTick * 4f;
+  }
+
   private static Color GetBaseColor(EntityViewData data)
   {
     if (data.isSlowed)
@@ -135,7 +154,8 @@ public class EntityViewManager : MonoBehaviour
       Vector2 pos = entityData.Position.ToUnityVector2();
       data.targetPosition = LocalPlayerContext.ToVisual(new Vector3(pos.x, 0f, pos.y));
 
-      if (data.currentHP - entityData.CurrentHP > 0.05f)
+      float hpDrop = data.currentHP - entityData.CurrentHP;
+      if (hpDrop > 0.05f && !IsDecayTick(entityData, hpDrop))
         damageCues.Add(new DamageCue(entityData.Id));
 
       data.currentHP = entityData.CurrentHP;

@@ -14,7 +14,7 @@ public static class ClientBoardState
 
   private static readonly HashSet<(int x, int y)> occupiedCells = new();
 
-  private static readonly Dictionary<int, (Vector2 pos, CardId type)> buildingById = new();
+  private static readonly Dictionary<int, (Vector2 pos, CardId type, EntityTeam team)> buildingById = new();
 
 
   public static void RebuildFromSnapshot(FullSnapshot snapshot)
@@ -23,13 +23,13 @@ public static class ClientBoardState
     buildingById.Clear();
     foreach (var e in snapshot.Entities)
       if (e.IsBuilding && e.IsAlive)
-        Register(e.Id, e.Position.ToUnityVector2(), e.Type);
+        Register(e.Id, e.Position.ToUnityVector2(), e.Type, e.Team);
   }
 
   public static void PlaceBuilding(EntitySnapshot entity)
   {
     if (!entity.IsBuilding || !entity.IsAlive) return;
-    Register(entity.Id, entity.Position.ToUnityVector2(), entity.Type);
+    Register(entity.Id, entity.Position.ToUnityVector2(), entity.Type, entity.Team);
   }
 
   public static void RemoveBuildingById(int entityId)
@@ -50,9 +50,30 @@ public static class ClientBoardState
       new((cx + 0.5f) * GRID_SIZE, (cy + 0.5f) * GRID_SIZE);
 
 
-  private static void Register(int id, Vector2 pos, CardId type)
+  // Deploy-zone state for the LOCAL player, derived from which of the enemy's Princess
+  // towers are still standing. Mirrors the server's MatchManager.ComputeDeployZoneState.
+  public static DeployZoneState GetLocalDeployZoneState()
   {
-    buildingById[id] = (pos, type);
+    EntityTeam enemy = LocalPlayerContext.IsTeam2 ? EntityTeam.Team1 : EntityTeam.Team2;
+
+    bool negXAlive = false;
+    bool posXAlive = false;
+    foreach (var info in buildingById.Values)
+    {
+      if (info.type != CardId.PrincessTower || info.team != enemy)
+        continue;
+      if (BattleArena.IsNegXLane(info.pos.x))
+        negXAlive = true;
+      else
+        posXAlive = true;
+    }
+
+    return BattleArena.GetDeployZoneState(negXAlive, posXAlive);
+  }
+
+  private static void Register(int id, Vector2 pos, CardId type, EntityTeam team)
+  {
+    buildingById[id] = (pos, type, team);
     foreach (var cell in GetFootprintCells(pos, type))
       occupiedCells.Add(cell);
   }

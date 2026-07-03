@@ -13,7 +13,7 @@ namespace ClashServer
     [SerializeField] bool enableDriftDetection = true;
     [SerializeField] string replayFolderPath = "Replays";
 
-    void Awake()
+    void OnEnable()
     {
       Instance = this;
       NetworkServer.OnConnectedEvent += HandlePlayerConnected;
@@ -21,7 +21,7 @@ namespace ClashServer
       Debug.Log("[Server] ServerMatchController ready");
     }
 
-    void OnDestroy()
+    void OnDisable()
     {
       NetworkServer.OnConnectedEvent -= HandlePlayerConnected;
       NetworkServer.OnDisconnectedEvent -= HandlePlayerDisconnected;
@@ -45,7 +45,8 @@ namespace ClashServer
 
       if (string.IsNullOrEmpty(matchId))
       {
-        room = MatchRegistry.GetOrCreatePveRoom("pve", enableReplay, enableDriftDetection, replayFolderPath);
+        string pveMatchId = $"pve-{conn.connectionId}";
+        room = MatchRegistry.GetOrCreatePveRoom(pveMatchId, enableReplay, enableDriftDetection, replayFolderPath);
         if (deckIds == null || deckIds.Length != 8)
         {
           Debug.LogWarning($"[Server] PvE rejected — invalid deck (len={deckIds?.Length})");
@@ -99,8 +100,13 @@ namespace ClashServer
     {
       if (MatchRegistry.TryGetRoomByConn(conn.connectionId, out var room))
       {
-        room.HandlePlayerDisconnected(conn);
+        bool roomEmpty = room.HandlePlayerDisconnected(conn);
         MatchRegistry.RemoveConn(conn.connectionId);
+        if (roomEmpty)
+        {
+          MatchRegistry.RemoveActive(room.MatchId);
+          Debug.Log($"[Server] Room {room.MatchId} empty — removed from registry");
+        }
       }
     }
   }

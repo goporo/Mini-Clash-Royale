@@ -37,21 +37,23 @@ namespace ClashServer
         if (!entity.IsAlive)
           continue;
 
+        // Hit speed keeps counting down while chasing, like Clash Royale.
+        entity.TickAttackCooldown();
+
         AttackRule attack = entity.Definition.Attack;
         if (attack.Kind == AttackKind.None)
           continue;
 
+        // Target selection already happened in TargetingSystem.UpdateTargets this tick;
+        // combat only validates and executes.
         if (entity.Target == null || !entity.Target.IsAlive)
-          entity.SetTarget(targetingSystem.AcquireNearestTarget(entity, liveEntities, entity.Definition.Targeting));
+          continue;
 
-        if (entity.Target == null || !targetingSystem.IsInRange(entity, entity.Target, attack.Range))
+        if (!targetingSystem.IsInRange(entity, entity.Target, attack.Range))
           continue;
 
         if (entity.AttackCooldownTicks > 0)
-        {
-          entity.TickAttackCooldown();
           continue;
-        }
 
         if (attack.Kind == AttackKind.SelfDestruct)
         {

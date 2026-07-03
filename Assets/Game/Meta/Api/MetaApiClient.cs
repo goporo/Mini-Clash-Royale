@@ -37,6 +37,9 @@ namespace ClashMeta
 
     static IEnumerator Send<T>(UnityWebRequest req, Action<ApiResult<T>> onDone)
     {
+      if (req.url.Contains(".localto.net"))
+        req.SetRequestHeader("localtonet-skip-warning", "1");
+
       bool isAuthRequest = req.url.Contains("/auth/");
       if (!isAuthRequest && !AuthService.IsReady)
       {

@@ -20,11 +20,11 @@ MonoBehaviour:
     rid: 1459619892071760055
   m_OverrideGlobalSceneList: 1
   m_Scenes:
-  - m_enabled: 1
+  - m_enabled: 0
     m_path: Assets/Scenes/Menu Scene.unity
   - m_enabled: 1
     m_path: Assets/Scenes/Server Scene.unity
-  - m_enabled: 1
+  - m_enabled: 0
     m_path: Assets/Scenes/Battle Scene.unity
   m_ScriptingDefines: []
   m_PlayerSettingsYaml:

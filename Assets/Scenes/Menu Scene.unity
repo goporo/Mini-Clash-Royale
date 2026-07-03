@@ -130,8 +130,9 @@ GameObject:
   - component: {fileID: 45942005}
   - component: {fileID: 45942003}
   - component: {fileID: 45942006}
+  - component: {fileID: 45942007}
   m_Layer: 0
-  m_Name: Network Manager
+  m_Name: Battle Server
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -226,12 +227,27 @@ MonoBehaviour:
   evaluationMethod: 0
   evaluationInterval: 3
   timeInterpolationGui: 0
-  useLocalServer: 1
-  MetaBaseUrl: http://localhost:5000
+  useLocalServer: 0
+  MetaBaseUrl: http://localhost:5167
   MetaInternalKey: secret
   PendingMatchId: 
   PendingPlayerToken: 
   PendingDeck: 
+--- !u!114 &45942007
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 45942001}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7922d53ee41484f46a9a9c71462d1cb8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  enableReplay: 1
+  enableDriftDetection: 1
+  replayFolderPath: Replays
 --- !u!1001 &66724797
 PrefabInstance:
   m_ObjectHideFlags: 0

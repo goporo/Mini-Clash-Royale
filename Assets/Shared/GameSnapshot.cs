@@ -41,6 +41,7 @@ namespace ClashShared
     public bool IsAlive;
     public bool IsBuilding;
     public bool IsSlowed;
+    public bool IsDecaying; // building bleeding HP from lifetime decay (client suppresses hit flash)
 
     public EntitySnapshot(
       int id,
@@ -52,7 +53,8 @@ namespace ClashShared
       int targetId,
       bool isAlive,
       bool isBuilding,
-      bool isSlowed = false)
+      bool isSlowed = false,
+      bool isDecaying = false)
     {
       Id = id;
       Position = position;
@@ -64,6 +66,7 @@ namespace ClashShared
       IsAlive = isAlive;
       IsBuilding = isBuilding;
       IsSlowed = isSlowed;
+      IsDecaying = isDecaying;
     }
   }
 

@@ -25,14 +25,13 @@ public class CardDragController : MonoBehaviour, IBeginDragHandler, IDragHandler
     _cardInitialScreenPos = slot.transform.position;
     _previewActive = false;
     GameplayEvents.Publish(new BattleCardInteractedEvent());
-    spawnOverlay.SetState(GetCurrentOverlayState());
-  }
 
-  private SpawnOverlayState GetCurrentOverlayState()
-  {
+    // Spells deploy anywhere — no zone overlay. Troops/buildings show the base half plus any
+    // forward lanes unlocked by destroying an enemy Princess tower.
     if (slot.Config.CardType == CardType.Spell)
-      return SpawnOverlayState.None;
-    return SpawnOverlayState.Full;
+      spawnOverlay.Hide();
+    else
+      spawnOverlay.Show(ClientBoardState.GetLocalDeployZoneState());
   }
 
   public void OnDrag(PointerEventData eventData)
@@ -41,7 +40,7 @@ public class CardDragController : MonoBehaviour, IBeginDragHandler, IDragHandler
     Vector3 rawWorldPos = GetRawWorldPos(eventData.position);
 
     bool inField = ClientCardPlacementService.TryGetPlacement(
-        rawWorldPos, slot.Config.PlacementRule, out Vector2 snappedWorldPos);
+        rawWorldPos, slot.Config.PlacementRule, slot.Config.CardId, out Vector2 snappedWorldPos);
 
     if (inField)
     {
@@ -74,7 +73,7 @@ public class CardDragController : MonoBehaviour, IBeginDragHandler, IDragHandler
 
   public void OnEndDrag(PointerEventData eventData)
   {
-    spawnOverlay.SetState(SpawnOverlayState.None);
+    spawnOverlay.Hide();
     slot.SetUIPosition(_cardInitialScreenPos);
     slot.SetScale(1f);
 
@@ -82,7 +81,7 @@ public class CardDragController : MonoBehaviour, IBeginDragHandler, IDragHandler
 
     if (!_previewActive ||
         !ClientCardPlacementService.TryGetPlacement(
-            rawWorldPos, slot.Config.PlacementRule, out Vector2 serverWorldPos))
+            rawWorldPos, slot.Config.PlacementRule, slot.Config.CardId, out Vector2 serverWorldPos))
     {
       preview.Hide();
       _previewActive = false;

@@ -7,13 +7,34 @@ using ClashShared;
 
 public class MyNetworkManager : NetworkManager, IClientBattleTransport
 {
+  #region Server Config
+
+  [Header("Dev")]
+  [SerializeField] bool useLocalServer = false;
+
+  [Header("Meta Server")]
+  public string MetaBaseUrl = "http://localhost:5000";
+  public string MetaInternalKey = "";
+
+  #endregion
+
+  #region Client Config
+
+  [HideInInspector] public string PendingMatchId;
+  [HideInInspector] public string PendingPlayerToken;
+  [HideInInspector] public ushort[] PendingDeck;
+
   public bool IsConnected => NetworkClient.isConnected;
+
+  #endregion
+
+  #region Lifecycle (shared)
 
   public override void Awake()
   {
     base.Awake();
 
-    string[] args = System.Environment.GetCommandLineArgs();
+    string[] args = Environment.GetCommandLineArgs();
     bool isHeadless = Array.IndexOf(args, "-batchmode") >= 0;
 
     if (isHeadless)
@@ -34,17 +55,6 @@ public class MyNetworkManager : NetworkManager, IClientBattleTransport
     }
   }
 
-  [Header("Dev")]
-  [SerializeField] bool useLocalServer = false;
-
-  [Header("Meta Server")]
-  public string MetaBaseUrl = "http://localhost:5000";
-  public string MetaInternalKey = "";
-
-  [HideInInspector] public string PendingMatchId;
-  [HideInInspector] public string PendingPlayerToken;
-  [HideInInspector] public ushort[] PendingDeck;
-
   public override void Start()
   {
     base.Start();
@@ -54,6 +64,10 @@ public class MyNetworkManager : NetworkManager, IClientBattleTransport
       StartServer();
     }
   }
+
+  #endregion
+
+  #region Server
 
   public override void OnStartServer()
   {
@@ -71,6 +85,43 @@ public class MyNetworkManager : NetworkManager, IClientBattleTransport
     Debug.Log("[Server] Waiting for players...");
     Debug.Log("[Server] ========================================");
   }
+
+  public override void OnStopServer()
+  {
+    NetworkServer.UnregisterHandler<PlayCardMessage>();
+    NetworkServer.UnregisterHandler<ClientReadyMessage>();
+    base.OnStopServer();
+  }
+
+  public override void OnServerConnect(NetworkConnectionToClient conn)
+  {
+    Debug.Log($"[Server] >> Player connected | connId={conn.connectionId} | address={conn.address} | total={NetworkServer.connections.Count}");
+    base.OnServerConnect(conn);
+  }
+
+  public override void OnServerDisconnect(NetworkConnectionToClient conn)
+  {
+    Debug.Log($"[Server] << Player disconnected | connId={conn.connectionId} | remaining={NetworkServer.connections.Count - 1}");
+    base.OnServerDisconnect(conn);
+  }
+
+  public override void OnServerAddPlayer(NetworkConnectionToClient conn) { }
+
+  void OnPlayCardMessage(NetworkConnectionToClient conn, PlayCardMessage msg)
+  {
+    if (ServerMatchController.Instance != null)
+      ServerMatchController.Instance.Server_PlayCard(conn, msg.RequestId, msg.CardId, msg.Position.ToVector2());
+  }
+
+  void OnClientReadyMessage(NetworkConnectionToClient conn, ClientReadyMessage msg)
+  {
+    if (ServerMatchController.Instance != null)
+      ServerMatchController.Instance.HandleClientReady(conn, msg.MatchId, msg.PlayerToken, msg.Deck);
+  }
+
+  #endregion
+
+  #region Client
 
   public override void OnStartClient()
   {
@@ -90,13 +141,6 @@ public class MyNetworkManager : NetworkManager, IClientBattleTransport
     Debug.Log("[Client] Message handlers registered");
   }
 
-  public override void OnStopServer()
-  {
-    NetworkServer.UnregisterHandler<PlayCardMessage>();
-    NetworkServer.UnregisterHandler<ClientReadyMessage>();
-    base.OnStopServer();
-  }
-
   public override void OnStopClient()
   {
     if (ReferenceEquals(ClientBattleGateway.Transport, this))
@@ -112,16 +156,6 @@ public class MyNetworkManager : NetworkManager, IClientBattleTransport
     UnityEngine.SceneManagement.SceneManager.LoadScene("Battle Scene");
   }
 
-  void OnBattleSceneLoaded(UnityEngine.SceneManagement.Scene scene, UnityEngine.SceneManagement.LoadSceneMode mode)
-  {
-    if (scene.name != "Battle Scene") return;
-    UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnBattleSceneLoaded;
-    Debug.Log("[Client] Battle Scene loaded — sending ClientReadyMessage");
-    NetworkClient.Send(new ClientReadyMessage { MatchId = PendingMatchId, PlayerToken = PendingPlayerToken, Deck = PendingDeck });
-  }
-
-  void OnMatchReadyMessage(MatchReadyMessage msg) { }
-
   public override void OnClientDisconnect()
   {
     Debug.Log("[Client] Disconnected from server");
@@ -133,18 +167,15 @@ public class MyNetworkManager : NetworkManager, IClientBattleTransport
     NetworkClient.Send(new PlayCardMessage { RequestId = requestId, CardId = cardId, Position = position });
   }
 
-  void OnPlayCardMessage(NetworkConnectionToClient conn, PlayCardMessage msg)
+  void OnBattleSceneLoaded(UnityEngine.SceneManagement.Scene scene, UnityEngine.SceneManagement.LoadSceneMode mode)
   {
-    if (ServerMatchController.Instance != null)
-      ServerMatchController.Instance.Server_PlayCard(conn, msg.RequestId, msg.CardId, msg.Position.ToVector2());
+    if (scene.name != "Battle Scene") return;
+    UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnBattleSceneLoaded;
+    Debug.Log("[Client] Battle Scene loaded — sending ClientReadyMessage");
+    NetworkClient.Send(new ClientReadyMessage { MatchId = PendingMatchId, PlayerToken = PendingPlayerToken, Deck = PendingDeck });
   }
 
-  void OnClientReadyMessage(NetworkConnectionToClient conn, ClientReadyMessage msg)
-  {
-    if (ServerMatchController.Instance != null)
-      ServerMatchController.Instance.HandleClientReady(conn, msg.MatchId, msg.PlayerToken, msg.Deck);
-  }
-
+  void OnMatchReadyMessage(MatchReadyMessage msg) { }
   void OnFullSnapshotMessage(FullSnapshotMessage msg) => ClientBattleGateway.PublishFullSnapshot(msg.Snapshot);
   void OnDeltaSnapshotMessage(DeltaSnapshotMessage msg) => ClientBattleGateway.PublishDeltaSnapshot(msg.Delta);
   void OnSpellCastMessage(SpellCastMessage msg) => ClientBattleGateway.PublishSpellCast(msg);
@@ -154,17 +185,5 @@ public class MyNetworkManager : NetworkManager, IClientBattleTransport
   void OnHandStateMessage(HandStateMessage msg) => ClientBattleGateway.PublishHandState(msg);
   void OnCardDrawnMessage(CardDrawnMessage msg) => ClientBattleGateway.PublishCardDrawn(msg);
 
-  public override void OnServerConnect(NetworkConnectionToClient conn)
-  {
-    Debug.Log($"[Server] >> Player connected | connId={conn.connectionId} | address={conn.address} | total={NetworkServer.connections.Count}");
-    base.OnServerConnect(conn);
-  }
-
-  public override void OnServerDisconnect(NetworkConnectionToClient conn)
-  {
-    Debug.Log($"[Server] << Player disconnected | connId={conn.connectionId} | remaining={NetworkServer.connections.Count - 1}");
-    base.OnServerDisconnect(conn);
-  }
-
-  public override void OnServerAddPlayer(NetworkConnectionToClient conn) { }
+  #endregion
 }

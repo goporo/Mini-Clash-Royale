@@ -9,6 +9,7 @@ namespace ClashServer
   {
     private bool deathHandled;
     private readonly List<ActiveStatusEffect> _activeEffects = new();
+    private int lifetimeTicksRemaining;
 
     public int Id { get; }
     public ServerEntityDefinition Definition { get; }
@@ -26,6 +27,10 @@ namespace ClashServer
     public List<Vector2> Path { get; private set; }
     public uint PathRecalcTick { get; private set; }
     public TargetLayer Layer => Definition.Movement == MovementKind.Air ? TargetLayer.Air : TargetLayer.Ground;
+
+    // True while a finite-lifetime building is bleeding HP from decay (not combat).
+    // The client uses this to suppress the take-damage flash for routine decay ticks.
+    public bool IsDecaying => Definition.HasLifetime && IsAlive;
 
     public bool IsSlowed
     {
@@ -63,6 +68,29 @@ namespace ClashServer
       FootprintRadius = definition.FootprintRadius;
       CollisionRadius = definition.CollisionRadius;
       PushWeight = definition.PushWeight;
+      lifetimeTicksRemaining = definition.LifetimeTicks;
+    }
+
+    // Per-tick lifetime decay for buildings with a finite lifespan (e.g. Cannon at 30s).
+    // Drains a fixed fraction of MaxHP each tick so the building reaches 0 HP exactly when
+    // its lifetime expires, independent of combat damage taken. No-op for entities without a lifetime.
+    // Returns true if this tick is the one that killed the entity (so the caller can run death handling).
+    public bool TickLifetimeDecay()
+    {
+      if (!Definition.HasLifetime || !IsAlive)
+        return false;
+
+      lifetimeTicksRemaining--;
+      if (lifetimeTicksRemaining <= 0)
+      {
+        lifetimeTicksRemaining = 0;
+        TakeDamage(Stats.CurrentHP); // expire: force HP to 0 / IsAlive false
+        return true;
+      }
+
+      float decayPerTick = Stats.MaxHP / Definition.LifetimeTicks;
+      TakeDamage(decayPerTick);
+      return !IsAlive;
     }
 
     public void TakeDamage(float damage)

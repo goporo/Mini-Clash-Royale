@@ -24,6 +24,9 @@ namespace ClashServer
   {
     public TargetCategory Category { get; init; }
     public TargetLayer Layers { get; init; }
+    // How far the unit "sees" enemies for aggro (Clash Royale sight ≈ 5.5 tiles).
+    // Effective sight never drops below attack range, so long-range buildings still work.
+    public float SightRange { get; init; } = 5.5f;
   }
 
   public sealed class StatusOnHit
@@ -206,6 +209,8 @@ namespace ClashServer
     public MovementKind Movement { get; init; }
     public TargetingRule Targeting { get; init; }
     public AttackRule Attack { get; init; }
+    public int LifetimeTicks { get; init; } // 0 = no decay; >0 = building dies after this many ticks
+    public bool HasLifetime => LifetimeTicks > 0;
     public IReadOnlyList<IEntityEffect> SpawnEffects { get; init; } = Array.Empty<IEntityEffect>();
     public IReadOnlyList<IEntityEffect> SelfDestructEffects { get; init; } = Array.Empty<IEntityEffect>();
     public IReadOnlyList<IEntityEffect> DeathEffects { get; init; } = Array.Empty<IEntityEffect>();

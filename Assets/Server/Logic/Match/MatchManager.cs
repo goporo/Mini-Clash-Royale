@@ -84,7 +84,7 @@ namespace ClashServer
       EntityTeam team = cmd.PlayerId == 0 ? EntityTeam.Team1 : EntityTeam.Team2;
 
       if (!BattleArena.TryGetCardType(cmd.CardId, out CardType cardType) ||
-          !ValidateSpawn(cardType, cmd.Position, team))
+          !ValidateSpawn(cmd.CardId, cardType, cmd.Position, team, ComputeDeployZoneState(director, team)))
       {
         logger.Log($"[MatchManager] Invalid spawn position {cmd.Position} for PlayCard. Command ignored.");
         return;
@@ -113,7 +113,7 @@ namespace ClashServer
         boardManager.PlaceBuilding(spawnedEntities[0]);
     }
 
-    public bool TryValidatePlayCard(CardId cardId, Vector2 position, EntityTeam team, out string failureReason)
+    public bool TryValidatePlayCard(CardId cardId, Vector2 position, EntityTeam team, GameplayDirector director, out string failureReason)
     {
       failureReason = null;
 
@@ -129,7 +129,7 @@ namespace ClashServer
         return false;
       }
 
-      if (!ValidateSpawn(cardType, position, team))
+      if (!ValidateSpawn(cardId, cardType, position, team, ComputeDeployZoneState(director, team)))
       {
         failureReason = "Invalid position";
         return false;
@@ -138,18 +138,46 @@ namespace ClashServer
       return true;
     }
 
-    private bool ValidateSpawn(CardType cardType, Vector2 position, EntityTeam team)
+    // Deploy-zone state for `team`, derived from which of the ENEMY's Princess towers survive.
+    public DeployZoneState ComputeDeployZoneState(GameplayDirector director, EntityTeam team)
+    {
+      EntityTeam enemy = team == EntityTeam.Team1 ? EntityTeam.Team2 : EntityTeam.Team1;
+
+      bool negXAlive = false;
+      bool posXAlive = false;
+      foreach (ServerEntity tower in director.GetEntitiesByTeam(enemy))
+      {
+        if (tower.Type != CardId.PrincessTower)
+          continue;
+        if (BattleArena.IsNegXLane(tower.Position.X))
+          negXAlive = true;
+        else
+          posXAlive = true;
+      }
+
+      return BattleArena.GetDeployZoneState(negXAlive, posXAlive);
+    }
+
+    private bool ValidateSpawn(CardId cardId, CardType cardType, Vector2 position, EntityTeam team, DeployZoneState zone)
     {
       if (!BattleArena.IsInsideArena(position.X, position.Y))
         return false;
 
-      return cardType switch
+      if (cardType == CardType.Spell)
+        return true;
+
+      if (cardType == CardType.Troop)
+        return BattleArena.IsInsideDeployZone(team, position.X, position.Y, zone)
+            && !boardManager.IsTileOccupied(position);
+
+      if (cardType == CardType.Building)
       {
-        CardType.Spell => true,
-        CardType.Troop => BattleArena.IsInsideDeployZone(team, position.X, position.Y) && !boardManager.IsTileOccupied(position),
-        CardType.Building => BattleArena.IsInsideDeployZone(team, position.X, position.Y) && !boardManager.IsTileOccupied(position),
-        _ => false
-      };
+        var (w, h) = BattleArena.GetBuildingSize(cardId);
+        return BattleArena.IsInsideBuildingDeployZone(team, position.X, position.Y, w * 0.5f, h * 0.5f, zone)
+            && !boardManager.IsTileOccupied(position);
+      }
+
+      return false;
     }
 
     private void ApplySurrender(MatchCommand cmd)

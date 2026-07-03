@@ -18,6 +18,10 @@ namespace ClashShared
     public float CollisionRadius { get; init; }
     public float PushWeight { get; init; }
 
+    // Lifetime — spawnable buildings decay over this many seconds (0 = no decay, e.g. towers).
+    // Each tick the building loses MaxHP / (LifetimeSeconds / FixedDeltaTime) HP.
+    public float LifetimeSeconds { get; init; }
+
     // On-hit status (e.g. Ice Wizard attack)
     public float OnHitSlowDuration { get; init; }
     public float OnHitSlowMagnitude { get; init; }
@@ -109,9 +113,10 @@ namespace ClashShared
         CollisionRadius = 1.0f,
         PushWeight = 100f,
         FootprintRadius = 1.0f,
-        AttackRange = 5.5f,
+        AttackRange = 7f,
         AttackCooldown = 0.9f,
         DamagePattern = DamagePattern.SingleTarget,
+        LifetimeSeconds = 30f, // building tự rã sau 30s (mất ~1/30 HP mỗi giây)
       },
 
       CardId.Goblin => new CardStats

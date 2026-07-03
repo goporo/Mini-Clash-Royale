@@ -47,7 +47,11 @@ namespace ClashServer
       try
       {
         var response = await http.SendAsync(request);
-        if (!response.IsSuccessStatusCode) return (false, null, null);
+        if (!response.IsSuccessStatusCode)
+        {
+          Debug.LogWarning($"[MatchRegistry] Verify HTTP {(int)response.StatusCode} for matchId={matchId} conn={conn.connectionId}");
+          return (false, null, null);
+        }
 
         string json = await response.Content.ReadAsStringAsync();
         verify = JsonConvert.DeserializeObject<VerifyResponse>(json);
@@ -57,6 +61,8 @@ namespace ClashServer
         Debug.LogError($"[MatchRegistry] Meta verify failed: {e.Message}");
         return (false, null, null);
       }
+
+      Debug.Log($"[MatchRegistry] Verify result — matchId={matchId} conn={conn.connectionId} valid={verify.Valid} team={verify.Team} deckLen={verify.Deck?.Length} player={verify.Username}");
 
       if (!verify.Valid || verify.Deck == null || verify.Deck.Length != 8)
         return (false, null, null);
